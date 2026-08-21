@@ -10,4 +10,8 @@
     <PackageReference Include="Confluent.Kafka" Version="2.15.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\MediCore.Identity.Application\Application.csproj" />
+  </ItemGroup>
+
 </Project>
