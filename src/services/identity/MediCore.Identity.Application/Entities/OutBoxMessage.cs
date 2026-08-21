@@ -4,6 +4,7 @@ public sealed class OutboxMessage
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    public required string Topic { get; set; }
     public required string EventType { get; set; }
 
     public required string Payload { get; set; }
