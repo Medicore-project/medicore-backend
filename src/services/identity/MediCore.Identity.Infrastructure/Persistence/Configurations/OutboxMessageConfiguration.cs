@@ -27,6 +27,10 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
             .HasMaxLength(200)
             .IsRequired();
 
+        builder.Property(message => message.EventKey)
+            .HasMaxLength(200)
+            .IsRequired();
+
         builder.HasIndex(message => new
         {
             message.ProcessedOnUtc,

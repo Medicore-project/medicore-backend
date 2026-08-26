@@ -10,6 +10,7 @@ public sealed class OutboxMessageTests
         var message = new OutboxMessage
         {
             Topic = "staff-events",
+            EventKey = "example-staff-id",
             EventType = "staff.updated",
             Payload = """{"staffId":"example"}"""
         };
