@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Confluent.Kafka;
+using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Infrastructure.Messaging;
+using MediCore.Identity.Infrastructure.Reporting;
 
 namespace MediCore.Identity.Infrastructure;
 
@@ -38,6 +40,8 @@ public static class DependencyInjection
 
     services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
     services.AddHostedService<OutboxProcessor>();
+
+    services.AddScoped<IReportQuery<AuditReportFilter, AuditReportRow>, AuditReportQuery>();
 
         return services;
     }
