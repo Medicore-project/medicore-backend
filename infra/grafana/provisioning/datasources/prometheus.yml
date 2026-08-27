@@ -1,0 +1,21 @@
+apiVersion: 1
+
+datasources:
+  # ---------------------------------------------------------------------------
+  # Prometheus — primary metrics source
+  # ---------------------------------------------------------------------------
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus-medicore
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+
+  # ---------------------------------------------------------------------------
+  # Seq is not a native Grafana datasource, but you can query Prometheus metrics.
+  # Add a Loki/Seq plugin datasource manually in the UI if needed.
+  # ---------------------------------------------------------------------------
