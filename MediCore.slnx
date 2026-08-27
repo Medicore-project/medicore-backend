@@ -14,4 +14,7 @@
   <Folder Name="/src/services/identity/MediCore.Identity.Tests/">
     <Project Path="src/services/identity/MediCore.Identity.Tests/Tests.csproj" />
   </Folder>
+  <Folder Name="/src/shared/">
+    <Project Path="src/shared/MediCore.Contracts/Contracts.csproj" />
+  </Folder>
 </Solution>
