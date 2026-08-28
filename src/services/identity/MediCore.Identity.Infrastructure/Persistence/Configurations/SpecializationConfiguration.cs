@@ -17,7 +17,8 @@ public class SpecializationConfiguration : IEntityTypeConfiguration<Specializati
             .HasMaxLength(100);
 
         builder.HasIndex(s => s.Name)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("is_deleted = false");
 
         builder.Property(s => s.Description)
             .HasMaxLength(500);

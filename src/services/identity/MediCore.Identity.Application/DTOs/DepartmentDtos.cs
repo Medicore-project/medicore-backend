@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace MediCore.Identity.Application.DTOs;
 
 public record DepartmentResponse(
@@ -9,10 +11,10 @@ public record DepartmentResponse(
     DateTime? UpdatedAt);
 
 public record CreateDepartmentRequest(
-    string Name,
-    string Description);
+    [Required][StringLength(100, MinimumLength = 1)] string Name,
+    [StringLength(500)] string Description);
 
 public record UpdateDepartmentRequest(
-    string Name,
-    string Description,
+    [Required][StringLength(100, MinimumLength = 1)] string Name,
+    [StringLength(500)] string Description,
     bool IsActive);

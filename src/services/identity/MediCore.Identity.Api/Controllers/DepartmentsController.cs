@@ -40,14 +40,18 @@ public class DepartmentsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentRequest request, CancellationToken cancellationToken)
     {
-        var existing = await _repository.GetByNameAsync(request.Name, cancellationToken);
+        var trimmedName = request.Name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmedName))
+            return BadRequest("Name cannot be empty or whitespace.");
+
+        var existing = await _repository.GetByNameAsync(trimmedName, cancellationToken);
         if (existing != null)
-            return Conflict($"A department with the name '{request.Name}' already exists.");
+            return Conflict($"A department with the name '{trimmedName}' already exists.");
 
         var department = new Department
         {
-            Name = request.Name,
-            Description = request.Description,
+            Name = trimmedName,
+            Description = request.Description?.Trim() ?? string.Empty,
             IsActive = true
         };
 
@@ -60,16 +64,20 @@ public class DepartmentsController : ControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDepartmentRequest request, CancellationToken cancellationToken)
     {
+        var trimmedName = request.Name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmedName))
+            return BadRequest("Name cannot be empty or whitespace.");
+
         var department = await _repository.GetByIdAsync(id, cancellationToken);
         if (department == null)
             return NotFound();
 
-        var existingName = await _repository.GetByNameAsync(request.Name, cancellationToken);
+        var existingName = await _repository.GetByNameAsync(trimmedName, cancellationToken);
         if (existingName != null && existingName.Id != id)
-            return Conflict($"A department with the name '{request.Name}' already exists.");
+            return Conflict($"A department with the name '{trimmedName}' already exists.");
 
-        department.Name = request.Name;
-        department.Description = request.Description;
+        department.Name = trimmedName;
+        department.Description = request.Description?.Trim() ?? string.Empty;
         department.IsActive = request.IsActive;
 
         await _repository.UpdateAsync(department, cancellationToken);
