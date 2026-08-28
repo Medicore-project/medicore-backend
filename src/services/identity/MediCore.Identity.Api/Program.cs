@@ -4,6 +4,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Prometheus;
 using Serilog;
 
+using MediCore.Identity.Application;
 using MediCore.Identity.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +23,7 @@ var connectionString = builder.Configuration.GetConnectionString("IdentityDataba
         "Connection string 'IdentityDatabase' is missing.");
 
 builder.Services.AddControllers();
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

@@ -1,13 +1,14 @@
+using Confluent.Kafka;
+using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Interfaces;
+using MediCore.Identity.Infrastructure.Messaging;
 using MediCore.Identity.Infrastructure.Persistence;
 using MediCore.Identity.Infrastructure.Persistence.Repositories;
+using MediCore.Identity.Infrastructure.Reporting;
+using MediCore.Identity.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Confluent.Kafka;
-using MediCore.Identity.Application.DTOs;
-using MediCore.Identity.Infrastructure.Messaging;
-using MediCore.Identity.Infrastructure.Reporting;
 
 namespace MediCore.Identity.Infrastructure;
 
@@ -25,23 +26,25 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString));
 
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
+        services.AddScoped<IStaffRepository, StaffRepository>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
-        ?? throw new InvalidOperationException(
-            "Kafka setting 'Kafka:BootstrapServers' is missing.");
+            ?? throw new InvalidOperationException(
+                "Kafka setting 'Kafka:BootstrapServers' is missing.");
 
-    services.AddSingleton<IProducer<string, string>>(_ =>
-        new ProducerBuilder<string, string>(new ProducerConfig
-        {
-            BootstrapServers = kafkaBootstrapServers,
-            EnableIdempotence = true,
-            Acks = Acks.All
-        }).Build());
+        services.AddSingleton<IProducer<string, string>>(_ =>
+            new ProducerBuilder<string, string>(new ProducerConfig
+            {
+                BootstrapServers = kafkaBootstrapServers,
+                EnableIdempotence = true,
+                Acks = Acks.All
+            }).Build());
 
-    services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
-    services.AddHostedService<OutboxProcessor>();
+        services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
+        services.AddHostedService<OutboxProcessor>();
 
-    services.AddScoped<IReportQuery<AuditReportFilter, AuditReportRow>, AuditReportQuery>();
+        services.AddScoped<IReportQuery<AuditReportFilter, AuditReportRow>, AuditReportQuery>();
 
         return services;
     }
