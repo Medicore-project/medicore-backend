@@ -1,7 +1,7 @@
 # =============================================================================
 # MediCore — Local Development Infrastructure
 # =============================================================================
-# Services: Postgres · Kafka (KRaft) · Kafka UI · Seq · Prometheus · Grafana · MailHog
+# Services: Postgres · Kafka (KRaft) · Kafka UI · Seq · Prometheus · Grafana · MailHog · Gateway
 # Run: docker compose up -d
 # Tear down (keep volumes): docker compose down
 # Tear down (wipe data):    docker compose down -v
@@ -248,3 +248,55 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # -------------------------------------------------------------------------
+  # API Gateway — YARP reverse proxy
+  # Routes:  /identity/**  → identity-api:8080
+  #          /patient/**   → patient-api:8080  (stubbed — returns 502 until live)
+  #          /appointment/** → appointment-api:8080  (stubbed)
+  #          /billing/**   → billing-api:8080  (stubbed)
+  #          /auth/**      → identity-api:8080  (login, refresh, logout)
+  # http://localhost:5000
+  # -------------------------------------------------------------------------
+  gateway:
+    build:
+      context: .
+      dockerfile: src/gateway/Dockerfile
+    image: medicore-gateway:local
+    container_name: medicore-gateway
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+
+      # Seq ingest endpoint inside the Docker network
+      Seq__ServerUrl: http://seq:5341
+
+      # CORS — allow localhost Vite dev server from the host
+      Cors__AllowedOrigins__0: ${GATEWAY_CORS_ORIGIN_0:-http://localhost:3000}
+      Cors__AllowedOrigins__1: ${GATEWAY_CORS_ORIGIN_1:-http://localhost:5173}
+
+      # Upstream service health probe URLs (inside Docker network)
+      Services__Identity:    http://identity-api:8080
+      Services__Patient:     http://patient-api:8080
+      Services__Appointment: http://appointment-api:8080
+      Services__Billing:     http://billing-api:8080
+
+      # YARP cluster overrides — point to internal Docker service names
+      ReverseProxy__Clusters__identity-cluster__Destinations__identity-primary__Address:     http://identity-api:8080
+      ReverseProxy__Clusters__patient-cluster__Destinations__patient-primary__Address:       http://patient-api:8080
+      ReverseProxy__Clusters__appointment-cluster__Destinations__appointment-primary__Address: http://appointment-api:8080
+      ReverseProxy__Clusters__billing-cluster__Destinations__billing-primary__Address:       http://billing-api:8080
+    ports:
+      - "${GATEWAY_PORT:-5000}:8080"
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
