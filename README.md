@@ -12,39 +12,30 @@
 3. [Quick Start](#3-quick-start)
 4. [Infrastructure Stack](#4-infrastructure-stack)
 5. [Service URLs](#5-service-urls)
-6. [Kafka Topics](#6-kafka-topics)
-7. [PostgreSQL Schemas](#7-postgresql-schemas)
-8. [Running a Service Locally](#8-running-a-service-locally)
-9. [Useful Commands](#9-useful-commands)
-10. [Project Structure](#10-project-structure)
-11. [Contributing](#11-contributing)
+6. [API Gateway](#6-api-gateway)
+7. [Kafka Topics](#7-kafka-topics)
+8. [PostgreSQL Schemas](#8-postgresql-schemas)
+9. [Running a Service Locally](#9-running-a-service-locally)
+10. [Useful Commands](#10-useful-commands)
+11. [Project Structure](#11-project-structure)
+12. [Contributing](#12-contributing)
 
 ---
 
 ## 1. Architecture Overview
 
 ```
-┌───────────────────────────────────────────────────────────────────────┐
-│  docker-compose stack (medicore network)                              │
-│                                                                       │
-│  ┌────────────┐  ┌────────────────┐  ┌───────────┐  ┌────────────┐  │
-│  │  Postgres  │  │  Kafka (KRaft) │  │    Seq    │  │  MailHog   │  │
-│  │   :5432    │  │  :9092 (int)   │  │   :5341   │  │  :1025/:   │  │
-│  │            │  │  :29092 (host) │  │           │  │   8025     │  │
-│  └────────────┘  └────────────────┘  └───────────┘  └────────────┘  │
-│                         │                                             │
-│                  ┌──────┴──────┐                                      │
-│                  │  Kafka UI   │                                      │
-│                  │   :8080     │                                      │
-│                  └─────────────┘                                      │
-│                                                                       │
-│  ┌────────────────┐  ┌──────────────┐                                │
-│  │   Prometheus   │  │   Grafana    │                                │
-│  │    :9090       │  │    :3000     │                                │
-│  └────────────────┘  └──────────────┘                                │
-└───────────────────────────────────────────────────────────────────────┘
-
-  dotnet run (host machine) ─── connects via localhost ports ──────────▲
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Client (Browser / Mobile)                                               │
+└──────────────────────────────┬───────────────────────────────────────────┘
+                               │ :5000
+┌──────────────────────────────▼───────────────────────────────────────────┐
+│  API Gateway (YARP)  — medicore-gateway                                  │
+│  • Rate limiting  • CORS allowlist  • Security headers  • HTTPS redirect │
+│  • Aggregated /health/services endpoint  • /metrics (Prometheus)         │
+└──┬──────────────┬──────────────┬──────────────┬────────────────────────┘
+   │ /identity/** │ /patient/**  │/appointment/ │ /billing/**
+   │ /auth/**     │              │**            │
 ```
 
 **Design decisions:**
@@ -132,6 +123,7 @@ Every container has a healthcheck. Dependent services (e.g. `kafka-init` waits f
 
 | Service | URL | Credentials |
 |---|---|---|
+| **API Gateway** | http://localhost:5000 | — |
 | **Kafka UI** | http://localhost:8080 | — |
 | **Seq** (logs) | http://localhost:5341 | — (open in dev) |
 | **Grafana** | http://localhost:3000 | admin / admin |
@@ -142,16 +134,112 @@ Every container has a healthcheck. Dependent services (e.g. `kafka-init` waits f
 
 ### dotnet service ports (run locally with `dotnet run`)
 
-| Service | Swagger | Metrics |
+| Service | Direct Swagger | Via Gateway |
 |---|---|---|
-| Identity | http://localhost:5001/swagger | http://localhost:5001/metrics |
-| Patient | http://localhost:5002/swagger | http://localhost:5002/metrics |
-| Appointment | http://localhost:5003/swagger | http://localhost:5003/metrics |
-| Billing | http://localhost:5004/swagger | http://localhost:5004/metrics |
+| Gateway | http://localhost:5000/health/services | — |
+| Identity | http://localhost:5001/swagger | http://localhost:5000/identity/swagger |
+| Patient | http://localhost:5002/swagger | http://localhost:5000/patient/swagger |
+| Appointment | http://localhost:5003/swagger | http://localhost:5000/appointment/swagger |
+| Billing | http://localhost:5004/swagger | http://localhost:5000/billing/swagger |
 
 ---
 
-## 6. Kafka Topics
+## 6. API Gateway
+
+> **Source:** [`src/gateway/MediCore.Gateway/`](src/gateway/MediCore.Gateway/)
+> **Port:** 5000 (HTTP) · 5443 (HTTPS)
+
+The gateway is a YARP reverse proxy that is the **only** entry point for all client traffic. The frontend never calls a service directly.
+
+### Routing
+
+| Path prefix | Upstream service | Status |
+|---|---|---|
+| `/identity/**` | Identity (`:5001`) | ✅ Live |
+| `/auth/**` | Identity (`:5001`) | ✅ Live |
+| `/patient/**` | Patient (`:5002`) | ⏳ Stubbed (503 until implemented) |
+| `/appointment/**` | Appointment (`:5003`) | ⏳ Stubbed |
+| `/billing/**` | Billing (`:5004`) | ⏳ Stubbed |
+
+YARP strips the prefix before forwarding — `GET /identity/api/staff` becomes `GET /api/staff` on the upstream.
+
+### Rate Limiting
+
+| Policy | Limit | Window | Applied to |
+|---|---|---|---|
+| `global` | 100 req | 60 s per IP | All routes |
+| `auth-login` | 5 req | 60 s per IP | `POST /auth/login` only |
+
+Over-limit requests receive `429 Too Many Requests` with a `Retry-After` header.
+
+### CORS
+
+Only origins in the `Cors:AllowedOrigins` config array are allowed. Any other origin receives no `Access-Control-Allow-Origin` header (the browser blocks the request).
+
+Default allowlist (Development):
+- `http://localhost:3000`
+- `http://localhost:5173`
+
+### Security Headers
+
+Applied to **every** response by `SecurityHeadersMiddleware`:
+
+| Header | Value |
+|---|---|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Content-Security-Policy` | `default-src 'self'; ...` |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` (production only) |
+| `Referrer-Policy` | `no-referrer` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` |
+
+The `Server` and `X-Powered-By` headers are **stripped** to avoid version disclosure.
+
+### Aggregated Health Endpoint
+
+```bash
+# Returns JSON with status of all four services
+curl http://localhost:5000/health/services
+
+# Gateway liveness (no upstream dependency)
+curl http://localhost:5000/health/live
+```
+
+Stubbed services report `Degraded` (not `Unhealthy`) — the gateway stays `Healthy` even if Patient/Appointment/Billing are not yet running.
+
+### QA Verification
+
+```bash
+# 1. Security headers present?
+curl -sI http://localhost:5000/health/live | grep -E "X-Content|X-Frame|Content-Security|Referrer"
+
+# 2. Blocked CORS origin (should see NO Access-Control-Allow-Origin)
+curl -sI -H "Origin: http://evil.com" http://localhost:5000/health/live | grep -i access-control
+
+# 3. Rate limit — fire 6 rapid requests to /auth/login (6th must return 429)
+for i in {1..6}; do
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:5000/auth/login \
+    -H "Content-Type: application/json" -d '{"email":"x","password":"y"}'
+done
+
+# 4. Prometheus metrics exposed?
+curl -s http://localhost:5000/metrics | grep "http_requests_received_total" | head -3
+```
+
+### Running the Gateway Locally
+
+```bash
+# Ensure infrastructure is up first
+docker compose up -d
+
+# Start the gateway (reads appsettings.Development.json automatically)
+dotnet run --project src/gateway/MediCore.Gateway/Gateway.csproj \
+           --launch-profile Development
+```
+
+---
+
+## 7. Kafka Topics
 
 Topics are created automatically by `kafka-init` on first `docker compose up`. **Never create topics in application code.**
 

@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/gateway/" />
+  <Folder Name="/src/gateway/MediCore.Gateway/">
+    <Project Path="src/gateway/MediCore.Gateway/Gateway.csproj" />
+  </Folder>
   <Folder Name="/src/services/" />
   <Folder Name="/src/services/identity/" />
   <Folder Name="/src/services/identity/MediCore.Identity.Api/">

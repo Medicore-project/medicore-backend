@@ -33,6 +33,20 @@ scrape_configs:
           service: prometheus
 
   # --------------------------------------------------------------------------
+  # API Gateway (YARP) — scrape via Docker network name when containerised
+  # --------------------------------------------------------------------------
+  - job_name: gateway
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - medicore-gateway:8080    # Docker container name
+          - host.docker.internal:5000 # host machine (dotnet run)
+        labels:
+          service: gateway
+          env: local
+
+  # --------------------------------------------------------------------------
   # Identity service  (dotnet run → http://localhost:5001/metrics)
   # When running in Docker the host.docker.internal alias is used.
   # --------------------------------------------------------------------------
