@@ -1,7 +1,11 @@
 # MediCore — Backend Monorepo
 
-> **Sprint 1 · Scrum 18 — Local Development Environment**  
-> A single `docker compose up` brings up the entire infrastructure stack so every team member gets an identical environment regardless of their OS or machine.
+> **Sprint 1 · Scrum 18–20**  
+> Local dev stack + API Gateway + CI/CD pipeline with security scanning and first Azure deployment.
+
+[![CI — Identity](https://github.com/chamika-kasthuri09/medicore-backend/actions/workflows/ci-identity.yml/badge.svg)](https://github.com/chamika-kasthuri09/medicore-backend/actions/workflows/ci-identity.yml)
+[![CI — Gateway](https://github.com/chamika-kasthuri09/medicore-backend/actions/workflows/ci-gateway.yml/badge.svg)](https://github.com/chamika-kasthuri09/medicore-backend/actions/workflows/ci-gateway.yml)
+[![Security Scan](https://github.com/chamika-kasthuri09/medicore-backend/actions/workflows/security-full.yml/badge.svg)](https://github.com/chamika-kasthuri09/medicore-backend/actions/workflows/security-full.yml)
 
 ---
 
@@ -13,12 +17,14 @@
 4. [Infrastructure Stack](#4-infrastructure-stack)
 5. [Service URLs](#5-service-urls)
 6. [API Gateway](#6-api-gateway)
-7. [Kafka Topics](#7-kafka-topics)
-8. [PostgreSQL Schemas](#8-postgresql-schemas)
-9. [Running a Service Locally](#9-running-a-service-locally)
-10. [Useful Commands](#10-useful-commands)
-11. [Project Structure](#11-project-structure)
-12. [Contributing](#12-contributing)
+7. [CI/CD Pipeline](#7-cicd-pipeline)
+8. [Deployment](#8-deployment)
+9. [Kafka Topics](#9-kafka-topics)
+10. [PostgreSQL Schemas](#10-postgresql-schemas)
+11. [Running a Service Locally](#11-running-a-service-locally)
+12. [Useful Commands](#12-useful-commands)
+13. [Project Structure](#13-project-structure)
+14. [Contributing](#14-contributing)
 
 ---
 
@@ -239,7 +245,51 @@ dotnet run --project src/gateway/MediCore.Gateway/Gateway.csproj \
 
 ---
 
-## 7. Kafka Topics
+## 7. CI/CD Pipeline
+
+The project uses GitHub Actions for CI/CD and security scanning. Workflows are path-filtered, meaning a change to the Billing service will not trigger the Identity service CI.
+
+### Workflows
+
+- **`ci-identity.yml`**: Builds, tests, security scans, pushes to GHCR, and deploys to Azure App Service (on `main`).
+- **`ci-gateway.yml`**: Builds, tests, security scans, and pushes to GHCR (proves independent deployability).
+- **`security-full.yml`**: Daily scheduled run covering Gitleaks, CodeQL, Trivy, and `dotnet list package --vulnerable` across the whole repository.
+
+### GitHub Secrets
+
+To deploy, the following secrets must be configured in the GitHub repository:
+
+| Secret | Description |
+|---|---|
+| `AZURE_CREDENTIALS` | Service principal JSON for Azure deployment |
+| `AZURE_WEBAPP_NAME` | The target App Service name (e.g., `medicore-identity`) |
+| `AZURE_RESOURCE_GROUP` | The target resource group (e.g., `medicore-rg`) |
+| `GHCR_PAT` | GitHub Personal Access Token (with `write:packages` scope) |
+
+---
+
+## 8. Deployment
+
+The Identity service and API Gateway are packaged as Docker images and published to GitHub Container Registry (GHCR).
+
+### Identity Service (Sprint 1)
+
+The Identity service is currently deployed to Azure App Service (Basic B1 tier) with an Azure Database for PostgreSQL Flexible Server backend (see `docs/adr/ADR-001-postgres-hosting.md`).
+
+- **Production URL**: `https://medicore-identity.azurewebsites.net`
+- **Health Check**: `https://medicore-identity.azurewebsites.net/health/live`
+
+### SecOps Evidence
+
+Every CI run generates artifacts proving security compliance:
+- Test coverage reports (Cobertura)
+- CodeQL static analysis results (GitHub Security tab)
+- Trivy container vulnerabilities (SARIF)
+- Gitleaks secret scan reports
+
+---
+
+## 9. Kafka Topics
 
 Topics are created automatically by `kafka-init` on first `docker compose up`. **Never create topics in application code.**
 
@@ -266,7 +316,7 @@ docker exec medicore-kafka kafka-topics.sh \
 
 ---
 
-## 7. PostgreSQL Schemas
+## 10. PostgreSQL Schemas
 
 A single Postgres instance (`medicore` database) hosts four isolated schemas. Each schema has a dedicated login role — cross-schema access is not granted.
 
@@ -298,7 +348,7 @@ docker exec -it medicore-postgres \
 
 ---
 
-## 8. Running a Service Locally
+## 11. Running a Service Locally
 
 ```bash
 # 1. Ensure infrastructure is up
@@ -322,7 +372,7 @@ dotnet run --project src/services/identity/MediCore.Identity.Api/Api.csproj \
 
 ---
 
-## 9. Useful Commands
+## 12. Useful Commands
 
 ```bash
 # ── Stack management ──────────────────────────────────────────────────
@@ -387,7 +437,7 @@ reportgenerator -reports:"**/coverage.cobertura.xml" \
 
 ---
 
-## 10. Project Structure
+## 13. Project Structure
 
 ```
 medicore-backend/
@@ -427,7 +477,7 @@ medicore-backend/
 
 ---
 
-## 11. Contributing
+## 14. Contributing
 
 1. **Never commit `.env`** — it is in `.gitignore`. Use `.env.example` for documentation.
 2. **Never create Kafka topics in application code** — use `infra/kafka/create-topics.sh`.
