@@ -25,6 +25,8 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString));
 
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
+        services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+        services.AddScoped<ISpecializationRepository, SpecializationRepository>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
         ?? throw new InvalidOperationException(
