@@ -11,6 +11,8 @@ public sealed class IdentityDbContext : DbContext
     }
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<StaffProfile> StaffProfiles => Set<StaffProfile>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Specialization> Specializations => Set<Specialization>();
 
@@ -31,7 +33,7 @@ public sealed class IdentityDbContext : DbContext
             if (entry.State == EntityState.Added)
             {
                 entry.Entity.CreatedAt = utcNow;
-                entry.Entity.CreatedBy = "system"; // Will be replaced by CurrentUserService later
+                entry.Entity.CreatedBy = "system";
             }
             else if (entry.State == EntityState.Modified)
             {
