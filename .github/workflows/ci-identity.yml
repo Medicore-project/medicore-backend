@@ -73,7 +73,6 @@ jobs:
         run: |
           dotnet test src/services/identity/MediCore.Identity.Tests/Tests.csproj \
             --configuration Release \
-            --no-build \
             --collect:"XPlat Code Coverage" \
             --results-directory ./coverage \
             --logger "trx;LogFileName=identity-tests.trx" \
@@ -115,10 +114,7 @@ jobs:
 
       # 2a. Gitleaks — scan full git history for leaked secrets
       - name: Gitleaks — Secret Scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}   # optional: omit for OSS
+        run: docker run -v ${{ github.workspace }}:/path zricethezav/gitleaks:latest detect --source="/path" -v
 
       # 2b. CodeQL — static analysis for C#
       - name: Initialize CodeQL
