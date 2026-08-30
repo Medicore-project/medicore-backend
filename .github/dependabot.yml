@@ -1,0 +1,77 @@
+version: 2
+updates:
+
+  # ── NuGet packages ─────────────────────────────────────────────────────────
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Colombo"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "bawantha0528"
+      - "chamika-kasthuri09"
+      - "tathiracs"
+      - "basidh20"
+    labels:
+      - "dependencies"
+      - "nuget"
+    groups:
+      # Group all Microsoft.* packages into a single PR to reduce noise
+      microsoft-packages:
+        patterns:
+          - "Microsoft.*"
+          - "System.*"
+      # Group all Serilog packages
+      serilog-packages:
+        patterns:
+          - "Serilog.*"
+      # Group all EF Core packages
+      efcore-packages:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "Npgsql.EntityFrameworkCore*"
+
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Colombo"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "your-github-username"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # ── Docker base images ───────────────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/src/services/identity"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Colombo"
+    reviewers:
+      - "your-github-username"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/src/gateway"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Colombo"
+    reviewers:
+      - "your-github-username"
+    labels:
+      - "dependencies"
+      - "docker"

@@ -1,0 +1,26 @@
+# CODEOWNERS — MediCore Backend
+# Every PR touching these paths requires approval from the listed team/user.
+# Syntax: <pattern>  <@user-or-@org/team>
+#
+# Replace @your-github-username with real GitHub handles.
+# Teams must exist in your GitHub org: Settings → Teams.
+
+# ── Catch-all: every file needs at least one review ──────────────────────────
+*                                           @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+
+# ── Infrastructure & DevOps ───────────────────────────────────────────────────
+/.github/                                   @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+/infra/                                     @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+/docker-compose.yml                         @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+/.dockerignore                              @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+/src/gateway/                               @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+
+# ── Identity service ──────────────────────────────────────────────────────────
+/src/services/identity/                     @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+
+# ── Shared contracts ──────────────────────────────────────────────────────────
+/src/shared/                                @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+
+# ── Documentation ────────────────────────────────────────────────────────────
+/docs/                                      @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
+/README.md                                  @bawantha0528 @chamika-kasthuri09 @tathiracs @basidh20
