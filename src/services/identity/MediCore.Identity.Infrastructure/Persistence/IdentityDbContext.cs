@@ -15,6 +15,8 @@ public sealed class IdentityDbContext : DbContext
     public DbSet<StaffProfile> StaffProfiles => Set<StaffProfile>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Specialization> Specializations => Set<Specialization>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
