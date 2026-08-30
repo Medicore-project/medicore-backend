@@ -75,8 +75,7 @@ jobs:
             --configuration Release \
             --collect:"XPlat Code Coverage" \
             --results-directory ./coverage \
-            --logger "trx;LogFileName=identity-tests.trx" \
-            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+            --logger "trx;LogFileName=identity-tests.trx"
         continue-on-error: false
 
       - name: Upload Test Results

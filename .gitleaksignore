@@ -1,0 +1,2 @@
+# Ignore fake dummy secrets committed to .env.example in the past
+64f14981c20942b4bd29e40255ee76f7875673b4:.env.example:generic-api-key:23
