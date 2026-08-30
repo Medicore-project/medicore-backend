@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<ISpecializationRepository, SpecializationRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
             ?? throw new InvalidOperationException(

@@ -1,8 +1,11 @@
 using MediCore.Identity.Api.Middleware;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
 using Prometheus;
 using Serilog;
+using System.Text;
 
 using MediCore.Identity.Application;
 using MediCore.Identity.Infrastructure;
@@ -28,6 +31,32 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("Jwt:Key configuration is missing.");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "medicore-identity";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "medicore-clients";
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("AdminOnly",   p => p.RequireRole("Admin"))
+    .AddPolicy("ClinicalStaff", p => p.RequireRole("Admin", "Doctor", "Nurse"))
+    .AddPolicy("FrontDesk",  p => p.RequireRole("Admin", "Receptionist"));
+
 builder.Services.AddHealthChecks()
     .AddCheck(
         "self",
@@ -43,6 +72,9 @@ var app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseHttpMetrics();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {

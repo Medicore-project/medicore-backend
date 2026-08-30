@@ -11,17 +11,20 @@ public class StaffController : ControllerBase
 {
     private readonly IStaffRepository _staffRepository;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IRoleRepository _roleRepository;
     private readonly IValidator<CreateStaffRequest> _createValidator;
     private readonly IValidator<UpdateStaffRequest> _updateValidator;
 
     public StaffController(
         IStaffRepository staffRepository,
         IPasswordHasher passwordHasher,
+        IRoleRepository roleRepository,
         IValidator<CreateStaffRequest> createValidator,
         IValidator<UpdateStaffRequest> updateValidator)
     {
         _staffRepository = staffRepository;
         _passwordHasher = passwordHasher;
+        _roleRepository = roleRepository;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
     }
@@ -97,6 +100,22 @@ public class StaffController : ControllerBase
         var deactivated = await _staffRepository.DeactivateStaffAsync(id, cancellationToken);
         if (!deactivated)
             return NotFound();
+
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/roles")]
+    public async Task<IActionResult> AssignRole(
+        Guid id,
+        [FromBody] AssignRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.RoleId == Guid.Empty)
+            return BadRequest("A valid role ID is required.");
+
+        var success = await _roleRepository.AssignRoleToStaffAsync(id, request.RoleId, cancellationToken);
+        if (!success)
+            return NotFound("Staff member or role not found.");
 
         return NoContent();
     }
