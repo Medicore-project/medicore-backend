@@ -13,6 +13,8 @@ public sealed class IdentityDbContext : DbContext
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<User> Users => Set<User>();
     public DbSet<StaffProfile> StaffProfiles => Set<StaffProfile>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Specialization> Specializations => Set<Specialization>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

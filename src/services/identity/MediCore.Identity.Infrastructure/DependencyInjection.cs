@@ -28,6 +28,8 @@ public static class DependencyInjection
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IStaffRepository, StaffRepository>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+        services.AddScoped<ISpecializationRepository, SpecializationRepository>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
             ?? throw new InvalidOperationException(
