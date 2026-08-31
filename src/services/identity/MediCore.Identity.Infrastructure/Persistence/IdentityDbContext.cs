@@ -17,6 +17,7 @@ public sealed class IdentityDbContext : DbContext
     public DbSet<Specialization> Specializations => Set<Specialization>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

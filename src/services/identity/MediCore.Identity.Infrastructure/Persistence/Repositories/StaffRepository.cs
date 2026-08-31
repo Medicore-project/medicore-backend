@@ -115,6 +115,7 @@ public class StaffRepository : IStaffRepository
     {
         var normalizedEmail = email.Trim().ToLower();
         return await _context.Users
+            .Include(u => u.StaffProfile)
             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
     }
 

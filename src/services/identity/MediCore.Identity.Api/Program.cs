@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 using Prometheus;
 using Serilog;
 using System.Text;
@@ -57,6 +58,22 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("ClinicalStaff", p => p.RequireRole("Admin", "Doctor", "Nurse"))
     .AddPolicy("FrontDesk",  p => p.RequireRole("Admin", "Receptionist"));
 
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("LoginPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 6,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+    options.RejectionStatusCode = 429;
+});
+
 builder.Services.AddHealthChecks()
     .AddCheck(
         "self",
@@ -75,6 +92,7 @@ app.UseHttpMetrics();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
