@@ -24,7 +24,9 @@ public static class DependencyInjection
                 "Connection string 'IdentityDatabase' is missing.");
 
         services.AddDbContext<IdentityDbContext>(options =>
-            options.UseNpgsql(connectionString));
+            options.UseNpgsql(connectionString, x => x.MigrationsHistoryTable(
+                Microsoft.EntityFrameworkCore.Migrations.HistoryRepository.DefaultTableName, 
+                "medicore_identity")));
 
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IStaffRepository, StaffRepository>();

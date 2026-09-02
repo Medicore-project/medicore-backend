@@ -26,7 +26,7 @@ namespace Infrastructure.Persistence.Migrations
                 table: "specializations",
                 column: "Name",
                 unique: true,
-                filter: "is_deleted = false");
+                filter: "\"IsDeleted\" = false");
 
             migrationBuilder.CreateIndex(
                 name: "IX_departments_Name",
@@ -34,7 +34,7 @@ namespace Infrastructure.Persistence.Migrations
                 table: "departments",
                 column: "Name",
                 unique: true,
-                filter: "is_deleted = false");
+                filter: "\"IsDeleted\" = false");
         }
 
         /// <inheritdoc />

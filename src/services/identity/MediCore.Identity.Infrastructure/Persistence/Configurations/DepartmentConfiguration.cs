@@ -18,7 +18,7 @@ public class DepartmentConfiguration : IEntityTypeConfiguration<Department>
 
         builder.HasIndex(d => d.Name)
             .IsUnique()
-            .HasFilter("is_deleted = false");
+            .HasFilter("\"IsDeleted\" = false");
 
         builder.Property(d => d.Description)
             .HasMaxLength(500);
