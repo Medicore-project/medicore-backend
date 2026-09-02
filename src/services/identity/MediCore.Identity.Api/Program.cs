@@ -87,6 +87,7 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<AuditLogMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseHttpMetrics();
 

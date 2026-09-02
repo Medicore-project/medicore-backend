@@ -37,6 +37,8 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddTransient<IJwtTokenGenerator, JwtTokenGenerator>();
 
+        services.AddScoped<IAuditReportService, AuditReportService>();
+
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
             ?? throw new InvalidOperationException(
                 "Kafka setting 'Kafka:BootstrapServers' is missing.");
