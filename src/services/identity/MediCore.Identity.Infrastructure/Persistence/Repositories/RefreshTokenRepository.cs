@@ -23,6 +23,7 @@ public class RefreshTokenRepository : IRefreshTokenRepository
     {
         return await _context.RefreshTokens
             .Include(rt => rt.User)
+            .ThenInclude(u => u.StaffProfile)
             .FirstOrDefaultAsync(rt => rt.Token == token, cancellationToken);
     }
 

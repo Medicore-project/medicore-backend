@@ -14,3 +14,5 @@ public record UserDto(
     string Role,
     string Name
 );
+
+public record RefreshTokenRequest(string RefreshToken);
