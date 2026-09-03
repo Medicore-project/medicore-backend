@@ -62,7 +62,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasFilter("is_deleted = false");
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("departments", "medicore_identity");
                 });
@@ -109,6 +109,48 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("ProcessedOnUtc", "OccurredOnUtc");
 
                     b.ToTable("outbox_messages", "medicore_identity");
+                });
+
+            modelBuilder.Entity("MediCore.Identity.Application.Entities.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByIp")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<DateTime>("Expires")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("Revoked")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedByIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("refresh_tokens", "medicore_identity");
                 });
 
             modelBuilder.Entity("MediCore.Identity.Application.Entities.Role", b =>
@@ -206,7 +248,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Name")
                         .IsUnique()
-                        .HasFilter("is_deleted = false");
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("specializations", "medicore_identity");
                 });
@@ -323,7 +365,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique()
-                        .HasFilter("is_deleted = false");
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("users", "medicore_identity");
                 });
@@ -344,6 +386,16 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("user_roles", "medicore_identity");
+                });
+
+            modelBuilder.Entity("MediCore.Identity.Application.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("MediCore.Identity.Application.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MediCore.Identity.Application.Entities.StaffProfile", b =>
@@ -368,8 +420,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("MediCore.Identity.Application.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Role");
 

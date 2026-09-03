@@ -18,9 +18,7 @@ RUN dotnet publish "Gateway.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-RUN addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --ingroup appgroup appuser
-USER appuser
+USER app
 
 COPY --from=publish /app/publish .
 

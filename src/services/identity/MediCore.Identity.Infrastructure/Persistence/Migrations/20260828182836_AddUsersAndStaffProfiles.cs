@@ -91,7 +91,7 @@ namespace Infrastructure.Persistence.Migrations
                 table: "users",
                 column: "Email",
                 unique: true,
-                filter: "is_deleted = false");
+                filter: "\"IsDeleted\" = false");
         }
 
         /// <inheritdoc />

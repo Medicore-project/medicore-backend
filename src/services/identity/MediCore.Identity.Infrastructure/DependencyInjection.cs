@@ -1,6 +1,7 @@
 using Confluent.Kafka;
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Interfaces;
+using MediCore.Identity.Infrastructure.Auth;
 using MediCore.Identity.Infrastructure.Messaging;
 using MediCore.Identity.Infrastructure.Persistence;
 using MediCore.Identity.Infrastructure.Persistence.Repositories;
@@ -23,7 +24,9 @@ public static class DependencyInjection
                 "Connection string 'IdentityDatabase' is missing.");
 
         services.AddDbContext<IdentityDbContext>(options =>
-            options.UseNpgsql(connectionString));
+            options.UseNpgsql(connectionString, x => x.MigrationsHistoryTable(
+                Microsoft.EntityFrameworkCore.Migrations.HistoryRepository.DefaultTableName, 
+                "medicore_identity")));
 
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IStaffRepository, StaffRepository>();
@@ -31,6 +34,8 @@ public static class DependencyInjection
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<ISpecializationRepository, SpecializationRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddTransient<IJwtTokenGenerator, JwtTokenGenerator>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
             ?? throw new InvalidOperationException(
