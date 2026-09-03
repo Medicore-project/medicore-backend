@@ -73,14 +73,10 @@ LABEL org.opencontainers.image.created="${BUILD_DATE}" \
 
 WORKDIR /app
 
-# Create a non-root system user — never run as root in production
-RUN addgroup --system --gid 1000 appgroup \
-    && adduser --system --uid 1000 --ingroup appgroup --no-create-home appuser
-
 # Copy published output
-COPY --from=publish --chown=appuser:appgroup /app/publish .
+COPY --from=publish /app/publish .
 
-USER appuser
+USER app
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080 \

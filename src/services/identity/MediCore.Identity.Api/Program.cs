@@ -1,9 +1,14 @@
 using MediCore.Identity.Api.Middleware;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 using Prometheus;
 using Serilog;
+using System.Text;
 
+using MediCore.Identity.Application;
 using MediCore.Identity.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,9 +27,52 @@ var connectionString = builder.Configuration.GetConnectionString("IdentityDataba
         "Connection string 'IdentityDatabase' is missing.");
 
 builder.Services.AddControllers();
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+var jwtKey = builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("Jwt:Key configuration is missing.");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "medicore-identity";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "medicore-clients";
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("AdminOnly",   p => p.RequireRole("Admin"))
+    .AddPolicy("ClinicalStaff", p => p.RequireRole("Admin", "Doctor", "Nurse"))
+    .AddPolicy("FrontDesk",  p => p.RequireRole("Admin", "Receptionist"));
+
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("LoginPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 6,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+    options.RejectionStatusCode = 429;
+});
 
 builder.Services.AddHealthChecks()
     .AddCheck(
@@ -39,8 +87,13 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<AuditLogMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseHttpMetrics();
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
