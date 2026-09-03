@@ -250,6 +250,40 @@ services:
       start_period: 10s
 
   # -------------------------------------------------------------------------
+  # Identity API — Authentication and User Management
+  # -------------------------------------------------------------------------
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/services/identity/Dockerfile
+    image: medicore-identity:local
+    container_name: medicore-identity
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__IdentityDatabase: ${IDENTITY_DB_CONNECTION}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}
+      Seq__ServerUrl: http://seq:5341
+      Kafka__BootstrapServers: kafka:9092
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -------------------------------------------------------------------------
   # API Gateway — YARP reverse proxy
   # Routes:  /identity/**  → identity-api:8080
   #          /patient/**   → patient-api:8080  (stubbed — returns 502 until live)
