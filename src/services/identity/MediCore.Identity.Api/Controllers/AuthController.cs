@@ -68,4 +68,62 @@ public class AuthController : ControllerBase
 
         return Ok(response);
     }
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    [EnableRateLimiting("LoginPolicy")]
+    public async Task<ActionResult<AuthResponse>> Refresh(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        var refreshToken = await _refreshTokenRepository.GetByTokenAsync(request.RefreshToken, cancellationToken);
+        if (refreshToken == null || !refreshToken.IsActive || refreshToken.User == null || refreshToken.User.IsDeleted)
+        {
+            return Unauthorized();
+        }
+
+        // Revoke the old token
+        refreshToken.Revoked = DateTime.UtcNow;
+        refreshToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        await _refreshTokenRepository.UpdateAsync(refreshToken, cancellationToken);
+
+        // Generate new tokens
+        var user = refreshToken.User;
+        var newAccessToken = _tokenGenerator.GenerateAccessToken(user);
+        var newRefreshTokenString = _tokenGenerator.GenerateRefreshToken();
+
+        var newRefreshToken = new RefreshToken
+        {
+            Token = newRefreshTokenString,
+            UserId = user.Id,
+            Expires = DateTime.UtcNow.AddDays(7),
+            CreatedByIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"
+        };
+        await _refreshTokenRepository.AddAsync(newRefreshToken, cancellationToken);
+
+        var response = new AuthResponse(
+            newAccessToken,
+            newRefreshTokenString,
+            new UserDto(user.Id, user.Email, user.Role, $"{user.StaffProfile?.FirstName} {user.StaffProfile?.LastName}".Trim())
+        );
+
+        return Ok(response);
+    }
+
+    [HttpPost("logout")]
+    [AllowAnonymous] // Allow even if token is expired, so they can cleanly log out
+    public async Task<IActionResult> Logout(
+        [FromBody] RefreshTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        var refreshToken = await _refreshTokenRepository.GetByTokenAsync(request.RefreshToken, cancellationToken);
+        
+        if (refreshToken != null && refreshToken.IsActive)
+        {
+            refreshToken.Revoked = DateTime.UtcNow;
+            refreshToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            await _refreshTokenRepository.UpdateAsync(refreshToken, cancellationToken);
+        }
+
+        return NoContent();
+    }
 }
