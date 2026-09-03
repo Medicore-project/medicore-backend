@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'medicore-identity-api'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['identity-api:80']
+
+  - job_name: 'medicore-gateway'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api-gateway:80']
