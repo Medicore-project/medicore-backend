@@ -15,7 +15,7 @@
     <!-- Rate limiting is built-in to ASP.NET Core 8 (no extra package needed) -->
 
     <!-- Health checks — HTTP probing of upstream services -->
-    <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
+    <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="9.0.0" />
 
     <!-- Structured logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
