@@ -1,0 +1,100 @@
+# =============================================================================
+# MediCore — Prometheus scrape configuration
+# =============================================================================
+# Reload without restart: curl -X POST http://localhost:9090/-/reload
+# =============================================================================
+
+global:
+  scrape_interval: 15s          # how often to scrape each target
+  evaluation_interval: 15s      # how often to evaluate alerting rules
+  scrape_timeout: 10s
+  external_labels:
+    cluster: medicore-local
+    env: development
+
+# ---------------------------------------------------------------------------
+# Alerting rules (extend this section as you add services)
+# ---------------------------------------------------------------------------
+rule_files:
+  - /etc/prometheus/rules/*.yml  # mount additional rule files here
+
+# ---------------------------------------------------------------------------
+# Scrape targets
+# ---------------------------------------------------------------------------
+scrape_configs:
+
+  # --------------------------------------------------------------------------
+  # Prometheus self-scrape
+  # --------------------------------------------------------------------------
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: prometheus
+
+  # --------------------------------------------------------------------------
+  # API Gateway (YARP) — scrape via Docker network name when containerised
+  # --------------------------------------------------------------------------
+  - job_name: gateway
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - medicore-gateway:8080    # Docker container name
+          - host.docker.internal:5000 # host machine (dotnet run)
+        labels:
+          service: gateway
+          env: local
+
+  # --------------------------------------------------------------------------
+  # Identity service  (dotnet run → http://localhost:5001/metrics)
+  # When running in Docker the host.docker.internal alias is used.
+  # --------------------------------------------------------------------------
+  - job_name: identity-api
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:5001   # host machine (dotnet run)
+        labels:
+          service: identity
+          env: local
+
+  # --------------------------------------------------------------------------
+  # Patient service  (port 5002 — add when implemented)
+  # --------------------------------------------------------------------------
+  - job_name: patient-api
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:5002
+        labels:
+          service: patient
+          env: local
+
+  # --------------------------------------------------------------------------
+  # Appointment service  (port 5003 — add when implemented)
+  # --------------------------------------------------------------------------
+  - job_name: appointment-api
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:5003
+        labels:
+          service: appointment
+          env: local
+
+  # --------------------------------------------------------------------------
+  # Billing service  (port 5004 — add when implemented)
+  # --------------------------------------------------------------------------
+  - job_name: billing-api
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:5004
+        labels:
+          service: billing
+          env: local

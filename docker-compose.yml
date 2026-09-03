@@ -1,0 +1,336 @@
+# =============================================================================
+# MediCore — Local Development Infrastructure
+# =============================================================================
+# Services: Postgres · Kafka (KRaft) · Kafka UI · Seq · Prometheus · Grafana · MailHog · Gateway
+# Run: docker compose up -d
+# Tear down (keep volumes): docker compose down
+# Tear down (wipe data):    docker compose down -v
+# =============================================================================
+
+name: medicore
+
+# ---------------------------------------------------------------------------
+# Shared networks
+# ---------------------------------------------------------------------------
+networks:
+  medicore-net:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# Named volumes — data survives container restarts
+# ---------------------------------------------------------------------------
+volumes:
+  postgres-data:
+  kafka-data:
+  seq-data:
+  prometheus-data:
+  grafana-data:
+  mailhog-data:
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL 16 — single instance, four schemas, one role per service
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: medicore-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medicore_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medicore_pass}
+      POSTGRES_DB: medicore         # superuser-owned default db (unused by services)
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medicore_admin} -d medicore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # -------------------------------------------------------------------------
+  # Kafka 3.8 — KRaft mode (no ZooKeeper)
+  # -------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: medicore-kafka
+    restart: unless-stopped
+    environment:
+      # KRaft identifiers
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      # Listeners
+      # PLAINTEXT        → used by internal services inside the Docker network
+      # PLAINTEXT_HOST   → used by the host machine (your IDE / dotnet run)
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # Cluster metadata
+      KAFKA_CLUSTER_ID: ${KAFKA_CLUSTER_ID:-MediCoreKraftCluster00}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topics are created by kafka-init only
+
+      # Log retention (dev-friendly)
+      KAFKA_LOG_RETENTION_HOURS: 168             # 7 days
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    ports:
+      - "${KAFKA_HOST_PORT:-29092}:29092"        # host access (dotnet run, Kafka UI from host)
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 2>/dev/null | grep -q 'medicore-kafka\\|id' || /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
+
+  # -------------------------------------------------------------------------
+  # Kafka Init — creates topics once and exits (idempotent)
+  # -------------------------------------------------------------------------
+  kafka-init:
+    image: apache/kafka:3.8.0
+    container_name: medicore-kafka-init
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - medicore-net
+    entrypoint: ["/bin/bash", "/scripts/create-topics.sh"]
+    volumes:
+      - ./infra/kafka/create-topics.sh:/scripts/create-topics.sh:ro
+
+  # -------------------------------------------------------------------------
+  # Kafka UI — browse topics, consumer groups, messages
+  # http://localhost:8080
+  # -------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: medicore-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: medicore-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+      AUTH_TYPE: "disabled"
+      MANAGEMENT_HEALTH_LDAP_ENABLED: "false"
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    networks:
+      - medicore-net
+
+  # -------------------------------------------------------------------------
+  # Seq — structured log ingestion and query
+  # Ingest: http://localhost:5341  |  UI: http://localhost:5341
+  # -------------------------------------------------------------------------
+  seq:
+    image: datalust/seq:latest
+    container_name: medicore-seq
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"        # anonymous / open in dev
+    ports:
+      - "${SEQ_PORT:-5341}:80"                  # UI + ingest endpoint
+      - "${SEQ_INGEST_PORT:-5342}:5341"         # structured ingest (GELF / Serilog HTTP sink)
+    volumes:
+      - seq-data:/data
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # -------------------------------------------------------------------------
+  # Prometheus — metrics scraper
+  # http://localhost:9090
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: medicore-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"               # POST /-/reload to hot-reload config
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # -------------------------------------------------------------------------
+  # Grafana — dashboards and alerting
+  # http://localhost:3000  (admin / admin on first run)
+  # -------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: medicore-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_PORT: 3000
+      GF_INSTALL_PLUGINS: ""
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # -------------------------------------------------------------------------
+  # MailHog — local SMTP / email testing
+  # SMTP: localhost:1025  |  UI: http://localhost:8025
+  # -------------------------------------------------------------------------
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: medicore-mailhog
+    restart: unless-stopped
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"       # SMTP
+      - "${MAILHOG_UI_PORT:-8025}:8025"          # Web UI
+    volumes:
+      - mailhog-data:/data
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8025"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # -------------------------------------------------------------------------
+  # Identity API — Authentication and User Management
+  # -------------------------------------------------------------------------
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/services/identity/Dockerfile
+    image: medicore-identity:local
+    container_name: medicore-identity
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__IdentityDatabase: ${IDENTITY_DB_CONNECTION}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}
+      Seq__ServerUrl: http://seq:5341
+      Kafka__BootstrapServers: kafka:9092
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -------------------------------------------------------------------------
+  # API Gateway — YARP reverse proxy
+  # Routes:  /identity/**  → identity-api:8080
+  #          /patient/**   → patient-api:8080  (stubbed — returns 502 until live)
+  #          /appointment/** → appointment-api:8080  (stubbed)
+  #          /billing/**   → billing-api:8080  (stubbed)
+  #          /auth/**      → identity-api:8080  (login, refresh, logout)
+  # http://localhost:5000
+  # -------------------------------------------------------------------------
+  gateway:
+    build:
+      context: .
+      dockerfile: src/gateway/Dockerfile
+    image: medicore-gateway:local
+    container_name: medicore-gateway
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+
+      # Seq ingest endpoint inside the Docker network
+      Seq__ServerUrl: http://seq:5341
+
+      # CORS — allow localhost Vite dev server from the host
+      Cors__AllowedOrigins__0: ${GATEWAY_CORS_ORIGIN_0:-http://localhost:3000}
+      Cors__AllowedOrigins__1: ${GATEWAY_CORS_ORIGIN_1:-http://localhost:5173}
+
+      # Upstream service health probe URLs (inside Docker network)
+      Services__Identity:    http://identity-api:8080
+      Services__Patient:     http://patient-api:8080
+      Services__Appointment: http://appointment-api:8080
+      Services__Billing:     http://billing-api:8080
+
+      # YARP cluster overrides — point to internal Docker service names
+      ReverseProxy__Clusters__identity-cluster__Destinations__identity-primary__Address:     http://identity-api:8080
+      ReverseProxy__Clusters__patient-cluster__Destinations__patient-primary__Address:       http://patient-api:8080
+      ReverseProxy__Clusters__appointment-cluster__Destinations__appointment-primary__Address: http://appointment-api:8080
+      ReverseProxy__Clusters__billing-cluster__Destinations__billing-primary__Address:       http://billing-api:8080
+    ports:
+      - "${GATEWAY_PORT:-5000}:8080"
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

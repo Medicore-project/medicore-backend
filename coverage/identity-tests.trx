@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="8ff6e511-0535-4c9b-8c42-821b7dbb674d" name="@Mac 2026-08-30 21:53:02" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-08-30T21:53:02.3677000+05:30" queuing="2026-08-30T21:53:02.3677000+05:30" start="2026-08-30T21:53:02.1254830+05:30" finish="2026-08-30T21:53:02.3679050+05:30" />
+  <TestSettings name="default" id="fe9c4736-d10d-4eaa-b2bb-a58e97f9822d">
+    <Deployment runDeploymentRoot="_Mac_2026-08-30_21_53_02" />
+  </TestSettings>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="0" executed="0" passed="0" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>You must install or update .NET to run this application.
+App: /Users/bawantha/Documents/SLIT/Y3S1/Medi Core/medicore-backend/src/services/identity/MediCore.Identity.Tests/bin/Release/net8.0/testhost.dll
+Architecture: arm64
+Framework: 'Microsoft.NETCore.App', version '8.0.0' (arm64)
+.NET location: /usr/local/share/dotnet/
+The following frameworks were found:
+  10.0.11 at [/usr/local/share/dotnet/shared/Microsoft.NETCore.App]
+Learn more:
+https://aka.ms/dotnet/app-launch-failed
+To install missing framework, download:
+https://aka.ms/dotnet-core-applaunch?framework=Microsoft.NETCore.App&amp;framework_version=8.0.0&amp;arch=arm64&amp;rid=osx-arm64&amp;os=osx.26
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="Mac" outcome="Error" timestamp="2026-08-30T21:53:02.3593290+05:30">
+        <Text>Testhost process for source(s) '/Users/bawantha/Documents/SLIT/Y3S1/Medi Core/medicore-backend/src/services/identity/MediCore.Identity.Tests/bin/Release/net8.0/Tests.dll' exited with error: You must install or update .NET to run this application.
+App: /Users/bawantha/Documents/SLIT/Y3S1/Medi Core/medicore-backend/src/services/identity/MediCore.Identity.Tests/bin/Release/net8.0/testhost.dll
+Architecture: arm64
+Framework: 'Microsoft.NETCore.App', version '8.0.0' (arm64)
+.NET location: /usr/local/share/dotnet/
+The following frameworks were found:
+  10.0.11 at [/usr/local/share/dotnet/shared/Microsoft.NETCore.App]
+Learn more:
+https://aka.ms/dotnet/app-launch-failed
+To install missing framework, download:
+https://aka.ms/dotnet-core-applaunch?framework=Microsoft.NETCore.App&amp;framework_version=8.0.0&amp;arch=arm64&amp;rid=osx-arm64&amp;os=osx.26
+. Please check the diagnostic logs for more information.</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

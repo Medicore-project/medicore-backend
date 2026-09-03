@@ -1,0 +1,24 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/gateway/" />
+  <Folder Name="/src/gateway/MediCore.Gateway/">
+    <Project Path="src/gateway/MediCore.Gateway/Gateway.csproj" />
+  </Folder>
+  <Folder Name="/src/services/" />
+  <Folder Name="/src/services/identity/" />
+  <Folder Name="/src/services/identity/MediCore.Identity.Api/">
+    <Project Path="src/services/identity/MediCore.Identity.Api/Api.csproj" />
+  </Folder>
+  <Folder Name="/src/services/identity/MediCore.Identity.Application/">
+    <Project Path="src/services/identity/MediCore.Identity.Application/Application.csproj" />
+  </Folder>
+  <Folder Name="/src/services/identity/MediCore.Identity.Infrastructure/">
+    <Project Path="src/services/identity/MediCore.Identity.Infrastructure/Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/services/identity/MediCore.Identity.Tests/">
+    <Project Path="src/services/identity/MediCore.Identity.Tests/Tests.csproj" />
+  </Folder>
+  <Folder Name="/src/shared/">
+    <Project Path="src/shared/MediCore.Contracts/Contracts.csproj" />
+  </Folder>
+</Solution>
