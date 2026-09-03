@@ -199,3 +199,53 @@ jobs:
           name: trivy-gateway-${{ github.sha }}
           path: trivy-gateway.sarif
           retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy to Azure App Service
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: docker-publish
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://medicore-gateway.azurewebsites.net
+
+    steps:
+      - name: Deploy container to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_GATEWAY_NAME }}
+          publish-profile: ${{ secrets.AZURE_GATEWAY_PUBLISH_PROFILE }}
+          images: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+
+      - name: Wait for deployment and health check
+        run: |
+          APP_URL="https://${{ secrets.AZURE_GATEWAY_NAME }}.azurewebsites.net"
+          echo "Waiting for $APP_URL to become healthy..."
+
+          for i in {1..12}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health/live" || echo "000")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Gateway deployment healthy!"
+              break
+            fi
+            if [ $i -eq 12 ]; then
+              echo "::error::Gateway health check failed after 60 seconds"
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Deployment summary
+        run: |
+          echo "## Gateway Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | Production |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | https://${{ secrets.AZURE_GATEWAY_NAME }}.azurewebsites.net |" >> $GITHUB_STEP_SUMMARY
+          echo "| Health | https://${{ secrets.AZURE_GATEWAY_NAME }}.azurewebsites.net/health/live |" >> $GITHUB_STEP_SUMMARY
+          echo "| Services Health | https://${{ secrets.AZURE_GATEWAY_NAME }}.azurewebsites.net/health/services |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | ${{ env.IMAGE_NAME }}:sha-${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
