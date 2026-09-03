@@ -29,7 +29,7 @@ on:
 
 env:
   DOTNET_VERSION: "8.0.x"
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/medicore-identity
+  IMAGE_NAME: ghcr.io/medicore-project/medicore-identity
   WORKING_DIR: src/services/identity
 
 permissions:
