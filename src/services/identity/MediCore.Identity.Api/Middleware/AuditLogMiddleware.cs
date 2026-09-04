@@ -66,7 +66,14 @@ public class AuditLogMiddleware
                 UserId = userId,
                 UserEmail = userEmail,
                 Role = userRole,
-                ActionType = method,
+                ActionType = method.ToUpper() switch
+                {
+                    "POST"   => "Create",
+                    "PUT"    => "Update",
+                    "PATCH"  => "Update",
+                    "DELETE" => "Delete",
+                    _        => method
+                },
                 EntityType = entityType,
                 EntityId = entityId,
                 OccurredAtUtc = DateTime.UtcNow,
