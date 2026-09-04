@@ -300,16 +300,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Initialize Database Schemas and Roles
-        run: psql "${{ secrets.AZURE_DB_ADMIN_CONN }}" -f infra/postgres/init/01-init-db.sql
+        run: |
+          CONN=$(echo '${{ secrets.AZURE_DB_ADMIN_CONN }}' | tr -d '[:space:]')
+          psql "$CONN" -f infra/postgres/init/01-init-db.sql
 
       - name: Install EF Core CLI
         run: dotnet tool install --global dotnet-ef
 
       - name: Apply Database Migrations
-        env:
-          ConnectionStrings__IdentityDatabase: ${{ secrets.AZURE_DB_IDENTITY_CONN }}
         run: |
-          dotnet ef database update \
+          EF_CONN=$(echo '${{ secrets.AZURE_DB_IDENTITY_CONN }}' | tr -d '[:space:]')
+          ConnectionStrings__IdentityDatabase="$EF_CONN" dotnet ef database update \
             --project src/services/identity/MediCore.Identity.Infrastructure/MediCore.Identity.Infrastructure.csproj \
             --startup-project src/services/identity/MediCore.Identity.Api/MediCore.Identity.Api.csproj
 
