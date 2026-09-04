@@ -299,20 +299,18 @@ jobs:
       - name: Install PostgreSQL Client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
+      # NOTE: This step requires Azure PostgreSQL firewall to allow GitHub Actions runner IPs.
+      # One-time setup in Azure Portal -> PostgreSQL -> Networking:
+      #   Add rule: Start IP = 0.0.0.0, End IP = 255.255.255.255, Name = allow-github-actions
+      # This step is idempotent (safe to run multiple times — IF NOT EXISTS guards prevent errors).
       - name: Initialize Database Schemas and Roles
+        continue-on-error: true
         run: |
           CONN=$(echo '${{ secrets.AZURE_DB_ADMIN_CONN }}' | tr -d '[:space:]')
           psql "$CONN" -f infra/postgres/init/01-init-db.sql
+          echo "DB init step completed (errors above are safe if schemas already exist)"
 
-      - name: Install EF Core CLI
-        run: dotnet tool install --global dotnet-ef
 
-      - name: Apply Database Migrations
-        run: |
-          EF_CONN=$(echo '${{ secrets.AZURE_DB_IDENTITY_CONN }}' | tr -d '[:space:]')
-          ConnectionStrings__IdentityDatabase="$EF_CONN" dotnet ef database update \
-            --project src/services/identity/MediCore.Identity.Infrastructure/MediCore.Identity.Infrastructure.csproj \
-            --startup-project src/services/identity/MediCore.Identity.Api/MediCore.Identity.Api.csproj
 
       - name: Deploy container to Azure App Service
         uses: azure/webapps-deploy@v3

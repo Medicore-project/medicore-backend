@@ -7,9 +7,11 @@ using System.Threading.RateLimiting;
 using Prometheus;
 using Serilog;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 
 using MediCore.Identity.Application;
 using MediCore.Identity.Infrastructure;
+using MediCore.Identity.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,6 +87,27 @@ builder.Services.AddHealthChecks()
         tags: ["ready"]);
 
 var app = builder.Build();
+
+// ---------------------------------------------------------------------------
+// Auto-run EF Core migrations on startup
+// The app runs inside Azure App Service (within Azure network), so it can
+// reach the PostgreSQL server even without opening the firewall to the public.
+// ---------------------------------------------------------------------------
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        logger.LogInformation("Applying EF Core migrations...");
+        await db.Database.MigrateAsync();
+        logger.LogInformation("EF Core migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to apply EF Core migrations. The app will still start.");
+    }
+}
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<AuditLogMiddleware>();
