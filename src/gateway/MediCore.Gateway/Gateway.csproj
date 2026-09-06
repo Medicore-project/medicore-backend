@@ -10,7 +10,7 @@
 
   <ItemGroup>
     <!-- YARP Reverse Proxy -->
-    <PackageReference Include="Yarp.ReverseProxy" Version="2.2.0" />
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
 
     <!-- Rate limiting is built-in to ASP.NET Core 8 (no extra package needed) -->
 
