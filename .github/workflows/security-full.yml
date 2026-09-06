@@ -139,7 +139,7 @@ jobs:
           fi
 
       - name: Upload audit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: nuget-audit-full-${{ github.run_id }}
@@ -191,7 +191,7 @@ jobs:
           category: trivy-scheduled-${{ matrix.name }}
 
       - name: Upload Trivy artifact (SecOps evidence)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-scheduled-${{ matrix.name }}-${{ github.run_id }}
