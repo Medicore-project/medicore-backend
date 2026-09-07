@@ -1,12 +1,14 @@
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Entities;
 using MediCore.Identity.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Identity.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class DepartmentsController : ControllerBase
 {
     private readonly IDepartmentRepository _repository;
@@ -38,6 +40,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentRequest request, CancellationToken cancellationToken)
     {
         var trimmedName = request.Name?.Trim() ?? string.Empty;
@@ -62,6 +65,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDepartmentRequest request, CancellationToken cancellationToken)
     {
         var trimmedName = request.Name?.Trim() ?? string.Empty;
@@ -86,6 +90,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var department = await _repository.GetByIdAsync(id, cancellationToken);

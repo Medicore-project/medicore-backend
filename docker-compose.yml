@@ -267,8 +267,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__IdentityDatabase: ${IDENTITY_DB_CONNECTION}
-      Jwt__Secret: ${JWT_SECRET}
+      # NOTE: IDENTITY_DB_CONNECTION in .env uses "Host=localhost" for services
+      # run via `dotnet run` on the host. Inside this container, Postgres is
+      # reachable at the "postgres" service name instead, so it's overridden here.
+      ConnectionStrings__IdentityDatabase: Host=postgres;Port=5432;Database=medicore;Username=identity_svc;Password=identity_pass;Search Path=medicore_identity
+      Jwt__Key: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}

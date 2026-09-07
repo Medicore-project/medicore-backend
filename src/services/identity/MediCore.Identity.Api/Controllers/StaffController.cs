@@ -1,12 +1,14 @@
 using FluentValidation;
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Identity.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class StaffController : ControllerBase
 {
     private readonly IStaffRepository _staffRepository;
@@ -59,6 +61,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create(
         [FromBody] CreateStaffRequest request,
         CancellationToken cancellationToken)
@@ -78,6 +81,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateStaffRequest request,
@@ -95,6 +99,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var deactivated = await _staffRepository.DeactivateStaffAsync(id, cancellationToken);
@@ -105,6 +110,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPost("{id:guid}/roles")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> AssignRole(
         Guid id,
         [FromBody] AssignRoleRequest request,
