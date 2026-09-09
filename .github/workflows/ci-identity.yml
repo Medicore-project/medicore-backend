@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: identity-test-results-${{ github.sha }}
           path: |
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload Security Scan Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-scan-results-${{ github.sha }}
           path: /tmp/nuget-audit.txt
@@ -258,7 +258,7 @@ jobs:
           category: trivy-identity
 
       - name: Upload Trivy results artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy-identity-${{ github.sha }}
