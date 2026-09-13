@@ -123,6 +123,14 @@ public sealed class PatientRegistrationServiceTests
             Added = patient;
             return Task.CompletedTask;
         }
+
+        public Task<PatientEntity?> GetByIdAsync(
+            Guid patientId,
+            CancellationToken cancellationToken = default) => Task.FromResult(Existing);
+
+        public Task<PatientEntity?> GetTrackedByIdAsync(
+            Guid patientId,
+            CancellationToken cancellationToken = default) => Task.FromResult(Existing);
     }
 
     private sealed class FakeOutboxRepository : IOutboxMessageRepository
@@ -154,7 +162,14 @@ public sealed class PatientRegistrationServiceTests
 
         public int SaveCount { get; private set; }
 
-        public Task SaveChangesAsync(string duplicateNic, CancellationToken cancellationToken = default)
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveCount++;
+            _onSave?.Invoke();
+            return Task.CompletedTask;
+        }
+
+        public Task SaveRegistrationAsync(string duplicateNic, CancellationToken cancellationToken = default)
         {
             SaveCount++;
             _onSave?.Invoke();

@@ -34,7 +34,7 @@ public sealed class PatientRegistrationService : IPatientRegistrationService
         string createdBy,
         CancellationToken cancellationToken = default)
     {
-        var normalizedNic = NormalizeNic(request.Nic);
+        var normalizedNic = PatientInputNormalizer.Nic(request.Nic);
         var existingPatient = await _patientRepository.FindByNicAsync(
             normalizedNic,
             includeArchived: true,
@@ -52,14 +52,14 @@ public sealed class PatientRegistrationService : IPatientRegistrationService
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             DateOfBirth = request.DateOfBirth,
-            Gender = NormalizeGender(request.Gender),
+            Gender = PatientInputNormalizer.Gender(request.Gender),
             Email = request.Email.Trim().ToLowerInvariant(),
-            Phone = NormalizePhone(request.Phone),
+            Phone = PatientInputNormalizer.Phone(request.Phone),
             AddressLine1 = request.AddressLine1.Trim(),
-            AddressLine2 = NullIfWhiteSpace(request.AddressLine2),
+            AddressLine2 = PatientInputNormalizer.OptionalText(request.AddressLine2),
             District = request.District.Trim(),
-            EmergencyContactName = NullIfWhiteSpace(request.EmergencyContactName),
-            EmergencyContactPhone = NormalizeOptionalPhone(request.EmergencyContactPhone),
+            EmergencyContactName = PatientInputNormalizer.OptionalText(request.EmergencyContactName),
+            EmergencyContactPhone = PatientInputNormalizer.OptionalPhone(request.EmergencyContactPhone),
             CreatedAt = now,
             CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "system" : createdBy.Trim()
         };
@@ -90,7 +90,7 @@ public sealed class PatientRegistrationService : IPatientRegistrationService
 
         try
         {
-            await _unitOfWork.SaveChangesAsync(normalizedNic, cancellationToken);
+            await _unitOfWork.SaveRegistrationAsync(normalizedNic, cancellationToken);
         }
         catch (DuplicateNicException)
         {
@@ -137,27 +137,4 @@ public sealed class PatientRegistrationService : IPatientRegistrationService
     private static ExistingPatientSummary ToExistingPatientSummary(Entities.Patient patient) =>
         new(patient.Id, patient.PatientNumber, patient.FullName, patient.Email, patient.IsDeleted);
 
-    internal static string NormalizeNic(string nic) => nic.Trim().ToUpperInvariant();
-
-    internal static string NormalizePhone(string phone) =>
-        phone.Replace(" ", string.Empty)
-            .Replace("-", string.Empty)
-            .Replace("(", string.Empty)
-            .Replace(")", string.Empty)
-            .Trim();
-
-    private static string? NormalizeOptionalPhone(string? phone) =>
-        string.IsNullOrWhiteSpace(phone) ? null : NormalizePhone(phone);
-
-    private static string? NullIfWhiteSpace(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static string NormalizeGender(string gender) => gender.Trim().ToLowerInvariant() switch
-    {
-        "male" => "Male",
-        "female" => "Female",
-        "other" => "Other",
-        "prefer not to say" or "prefernottosay" => "PreferNotToSay",
-        _ => gender.Trim()
-    };
 }

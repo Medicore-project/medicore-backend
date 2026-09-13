@@ -15,7 +15,12 @@ public sealed class PatientUnitOfWork : IUnitOfWork
         _dbContext = dbContext;
     }
 
-    public async Task SaveChangesAsync(
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SaveRegistrationAsync(
         string duplicateNic,
         CancellationToken cancellationToken = default)
     {
