@@ -79,4 +79,5 @@ public sealed record PatientAccessContext(
     string ActorId,
     string ActorRole,
     string CorrelationId,
-    string? IpAddress);
+    string? IpAddress,
+    string? ActorEmail = null);
