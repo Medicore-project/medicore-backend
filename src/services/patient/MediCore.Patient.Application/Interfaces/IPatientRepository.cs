@@ -10,4 +10,8 @@ public interface IPatientRepository
         CancellationToken cancellationToken = default);
 
     Task AddAsync(PatientEntity patient, CancellationToken cancellationToken = default);
+
+    Task<PatientEntity?> GetByIdAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    Task<PatientEntity?> GetTrackedByIdAsync(Guid patientId, CancellationToken cancellationToken = default);
 }

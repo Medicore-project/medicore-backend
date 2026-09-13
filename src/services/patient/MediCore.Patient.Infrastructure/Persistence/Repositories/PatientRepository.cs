@@ -33,4 +33,21 @@ public sealed class PatientRepository : IPatientRepository
     {
         return _dbContext.Patients.AddAsync(patient, cancellationToken).AsTask();
     }
+
+    public Task<PatientEntity?> GetByIdAsync(
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Patients
+            .AsNoTracking()
+            .SingleOrDefaultAsync(patient => patient.Id == patientId, cancellationToken);
+    }
+
+    public Task<PatientEntity?> GetTrackedByIdAsync(
+        Guid patientId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.Patients
+            .SingleOrDefaultAsync(patient => patient.Id == patientId, cancellationToken);
+    }
 }

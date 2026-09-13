@@ -12,6 +12,7 @@ public sealed class PatientDbContext : DbContext
     }
 
     public DbSet<PatientEntity> Patients => Set<PatientEntity>();
+    public DbSet<PatientAuditLog> PatientAuditLogs => Set<PatientAuditLog>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

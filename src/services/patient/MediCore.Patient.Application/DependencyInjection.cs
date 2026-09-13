@@ -10,6 +10,7 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IPatientRegistrationService, PatientRegistrationService>();
+        services.AddScoped<IPatientProfileService, PatientProfileService>();
         services.AddSingleton(TimeProvider.System);
         return services;
     }

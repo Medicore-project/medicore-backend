@@ -5,16 +5,12 @@ using MediCore.Patient.Application.Services;
 
 namespace MediCore.Patient.Application.Validators;
 
-public sealed partial class CreatePatientRequestValidator : AbstractValidator<CreatePatientRequest>
+public sealed partial class UpdatePatientRequestValidator : AbstractValidator<UpdatePatientRequest>
 {
     private static readonly string[] AllowedGenders = ["Male", "Female", "Other", "PreferNotToSay", "Prefer not to say"];
 
-    public CreatePatientRequestValidator(TimeProvider timeProvider)
+    public UpdatePatientRequestValidator(TimeProvider timeProvider)
     {
-        RuleFor(x => x.Nic)
-            .NotEmpty().WithMessage("NIC is required.")
-            .Must(BeAValidNic).WithMessage("NIC must contain 12 digits, or 9 digits followed by V or X.");
-
         RuleFor(x => x.FirstName)
             .NotEmpty().WithMessage("First name is required.")
             .MaximumLength(100).WithMessage("First name must not exceed 100 characters.");
@@ -63,14 +59,8 @@ public sealed partial class CreatePatientRequestValidator : AbstractValidator<Cr
             .When(x => !string.IsNullOrWhiteSpace(x.EmergencyContactPhone));
     }
 
-    private static bool BeAValidNic(string? nic) =>
-        !string.IsNullOrWhiteSpace(nic) && NicRegex().IsMatch(PatientInputNormalizer.Nic(nic));
-
     private static bool BeAValidPhone(string? phone) =>
         !string.IsNullOrWhiteSpace(phone) && PhoneRegex().IsMatch(PatientInputNormalizer.Phone(phone));
-
-    [GeneratedRegex(@"^(?:\d{12}|\d{9}[VX])$", RegexOptions.CultureInvariant)]
-    private static partial Regex NicRegex();
 
     [GeneratedRegex(@"^(?:\+94|0)\d{9}$", RegexOptions.CultureInvariant)]
     private static partial Regex PhoneRegex();

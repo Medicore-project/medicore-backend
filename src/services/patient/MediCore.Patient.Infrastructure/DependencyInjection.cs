@@ -24,6 +24,7 @@ public static class DependencyInjection
                 "medicore_patient")));
 
         services.AddScoped<IPatientRepository, PatientRepository>();
+        services.AddScoped<IPatientAuditRepository, PatientAuditRepository>();
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IUnitOfWork, PatientUnitOfWork>();
 

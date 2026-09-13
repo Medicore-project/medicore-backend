@@ -14,14 +14,20 @@ namespace MediCore.Patient.Api.Controllers;
 public sealed class PatientsController : ControllerBase
 {
     private readonly IValidator<CreatePatientRequest> _validator;
+    private readonly IValidator<UpdatePatientRequest> _updateValidator;
     private readonly IPatientRegistrationService _registrationService;
+    private readonly IPatientProfileService _profileService;
 
     public PatientsController(
         IValidator<CreatePatientRequest> validator,
-        IPatientRegistrationService registrationService)
+        IValidator<UpdatePatientRequest> updateValidator,
+        IPatientRegistrationService registrationService,
+        IPatientProfileService profileService)
     {
         _validator = validator;
+        _updateValidator = updateValidator;
         _registrationService = registrationService;
+        _profileService = profileService;
     }
 
     /// <summary>Registers a new patient and schedules a patient.registered event.</summary>
@@ -38,17 +44,7 @@ public sealed class PatientsController : ControllerBase
         var validation = await _validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
-            var errors = validation.Errors
-                .GroupBy(error => ToCamelCase(error.PropertyName))
-                .ToDictionary(
-                    group => group.Key,
-                    group => group.Select(error => error.ErrorMessage).Distinct().ToArray());
-
-            return ValidationProblem(new ValidationProblemDetails(errors)
-            {
-                Title = "Patient registration validation failed.",
-                Status = StatusCodes.Status400BadRequest
-            });
+            return CreateValidationProblem(validation.Errors, "Patient registration validation failed.");
         }
 
         var correlationId = HttpContext.Items[CorrelationIdMiddleware.ItemKey]?.ToString()
@@ -74,6 +70,106 @@ public sealed class PatientsController : ControllerBase
                 duplicate.ExistingPatient)),
             _ => throw new InvalidOperationException("Unknown patient registration result.")
         };
+    }
+
+    /// <summary>Gets an active patient profile and records the access in the audit log.</summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(PatientProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+    {
+        var patient = await _profileService.GetByIdAsync(
+            id,
+            CreateAccessContext(),
+            cancellationToken);
+
+        return patient is null ? NotFound() : Ok(patient);
+    }
+
+    /// <summary>Updates an active patient's personal and contact details.</summary>
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(PatientProfileResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] UpdatePatientRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await _updateValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return CreateValidationProblem(validation.Errors, "Patient profile validation failed.");
+        }
+
+        var result = await _profileService.UpdateAsync(
+            id,
+            request,
+            CreateAccessContext(),
+            cancellationToken);
+
+        return result switch
+        {
+            PatientUpdatedResult updated => Ok(updated.Patient),
+            PatientUpdateNotFoundResult => NotFound(),
+            _ => throw new InvalidOperationException("Unknown patient update result.")
+        };
+    }
+
+    /// <summary>Soft-deletes an active patient profile.</summary>
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var deleted = await _profileService.DeleteAsync(
+            id,
+            CreateAccessContext(),
+            cancellationToken);
+
+        return deleted ? NoContent() : NotFound();
+    }
+
+    private PatientAccessContext CreateAccessContext()
+    {
+        var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.Identity?.Name
+            ?? "system";
+        var actorRole = User.FindFirstValue(ClaimTypes.Role)
+            ?? User.FindFirstValue("role")
+            ?? "Unknown";
+        var correlationId = HttpContext.Items[CorrelationIdMiddleware.ItemKey]?.ToString()
+            ?? Guid.NewGuid().ToString();
+
+        return new PatientAccessContext(
+            actorId,
+            actorRole,
+            correlationId,
+            HttpContext.Connection.RemoteIpAddress?.ToString());
+    }
+
+    private IActionResult CreateValidationProblem(
+        IEnumerable<FluentValidation.Results.ValidationFailure> failures,
+        string title)
+    {
+        var errors = failures
+            .GroupBy(error => ToCamelCase(error.PropertyName))
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(error => error.ErrorMessage).Distinct().ToArray());
+
+        return ValidationProblem(new ValidationProblemDetails(errors)
+        {
+            Title = title,
+            Status = StatusCodes.Status400BadRequest
+        });
     }
 
     private static string ToCamelCase(string value) =>

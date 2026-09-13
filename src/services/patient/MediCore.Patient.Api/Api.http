@@ -19,3 +19,36 @@ X-Correlation-ID: scrum-23-local-test
   "emergencyContactName": "Kamal Perera",
   "emergencyContactPhone": "0711234567"
 }
+
+###
+
+GET {{PatientApi}}/api/patients/{{patientId}}
+Authorization: Bearer {{accessToken}}
+X-Correlation-ID: scrum-24-get-profile
+
+###
+
+PUT {{PatientApi}}/api/patients/{{patientId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+X-Correlation-ID: scrum-24-update-profile
+
+{
+  "firstName": "Nimali",
+  "lastName": "Perera",
+  "dateOfBirth": "2000-05-15",
+  "gender": "Female",
+  "email": "nimali.updated@example.com",
+  "phone": "0771234567",
+  "addressLine1": "14 New Hospital Road",
+  "addressLine2": null,
+  "district": "Colombo",
+  "emergencyContactName": "Kamal Perera",
+  "emergencyContactPhone": "0711234567"
+}
+
+###
+
+DELETE {{PatientApi}}/api/patients/{{patientId}}
+Authorization: Bearer {{accessToken}}
+X-Correlation-ID: scrum-24-delete-profile
