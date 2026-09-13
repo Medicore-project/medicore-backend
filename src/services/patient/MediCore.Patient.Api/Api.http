@@ -1,0 +1,21 @@
+@PatientApi = http://localhost:5002
+
+POST {{PatientApi}}/api/patients
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+X-Correlation-ID: scrum-23-local-test
+
+{
+  "nic": "200012345678",
+  "firstName": "Nimali",
+  "lastName": "Perera",
+  "dateOfBirth": "2000-05-15",
+  "gender": "Female",
+  "email": "nimali@example.com",
+  "phone": "0771234567",
+  "addressLine1": "12 Hospital Road",
+  "addressLine2": null,
+  "district": "Colombo",
+  "emergencyContactName": "Kamal Perera",
+  "emergencyContactPhone": "0711234567"
+}
