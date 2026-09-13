@@ -145,6 +145,63 @@ public sealed class PatientsControllerTests
         Assert.Equal(1, profileService.DeleteCallCount);
     }
 
+    [Fact]
+    public async Task Search_returns_200_with_paginated_results()
+    {
+        var page = SearchResponse();
+        var searchService = new StubSearchService { Response = page };
+        var controller = CreateController(
+            new StubRegistrationService(new PatientRegisteredResult(null!)),
+            new StubProfileService(),
+            searchService);
+
+        var result = await controller.Search(
+            new PatientSearchRequest("Nimali", 1, 20),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(page, Assert.IsType<PatientSearchResponse>(ok.Value));
+        Assert.Equal(1, searchService.CallCount);
+    }
+
+    [Fact]
+    public async Task Search_with_no_matches_returns_200_with_empty_items()
+    {
+        var controller = CreateController(
+            new StubRegistrationService(new PatientRegisteredResult(null!)),
+            new StubProfileService(),
+            new StubSearchService());
+
+        var result = await controller.Search(
+            new PatientSearchRequest("missing", 1, 20),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<PatientSearchResponse>(ok.Value);
+        Assert.Empty(response.Items);
+        Assert.Equal(0, response.TotalCount);
+    }
+
+    [Fact]
+    public async Task Invalid_search_pagination_returns_400_without_calling_service()
+    {
+        var searchService = new StubSearchService();
+        var controller = CreateController(
+            new StubRegistrationService(new PatientRegisteredResult(null!)),
+            new StubProfileService(),
+            searchService);
+
+        var result = await controller.Search(
+            new PatientSearchRequest("Nimali", 0, 101),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        var problem = Assert.IsType<ValidationProblemDetails>(badRequest.Value);
+        Assert.Contains("page", problem.Errors.Keys);
+        Assert.Contains("pageSize", problem.Errors.Keys);
+        Assert.Equal(0, searchService.CallCount);
+    }
+
     private static PatientsController CreateController(PatientRegistrationResult result) =>
         CreateController(new StubRegistrationService(result));
 
@@ -153,11 +210,24 @@ public sealed class PatientsControllerTests
 
     private static PatientsController CreateController(
         IPatientRegistrationService service,
-        IPatientProfileService profileService)
+        IPatientProfileService profileService) =>
+        CreateController(service, profileService, new StubSearchService());
+
+    private static PatientsController CreateController(
+        IPatientRegistrationService service,
+        IPatientProfileService profileService,
+        IPatientSearchService searchService)
     {
         IValidator<CreatePatientRequest> validator = new CreatePatientRequestValidator(new FixedTimeProvider(Now));
         IValidator<UpdatePatientRequest> updateValidator = new UpdatePatientRequestValidator(new FixedTimeProvider(Now));
-        var controller = new PatientsController(validator, updateValidator, service, profileService)
+        IValidator<PatientSearchRequest> searchValidator = new PatientSearchRequestValidator();
+        var controller = new PatientsController(
+            validator,
+            updateValidator,
+            searchValidator,
+            service,
+            profileService,
+            searchService)
         {
             ControllerContext = new ControllerContext
             {
@@ -166,6 +236,21 @@ public sealed class PatientsControllerTests
         };
         controller.HttpContext.Items[CorrelationIdMiddleware.ItemKey] = "corr-controller-test";
         return controller;
+    }
+
+    private sealed class StubSearchService : IPatientSearchService
+    {
+        public PatientSearchResponse Response { get; init; } = PatientSearchResponse.Empty(1, 20);
+        public int CallCount { get; private set; }
+
+        public Task<PatientSearchResponse> SearchAsync(
+            PatientSearchRequest request,
+            PatientAccessContext accessContext,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(Response);
+        }
     }
 
     private sealed class StubProfileService : IPatientProfileService
@@ -251,6 +336,21 @@ public sealed class PatientsControllerTests
         null,
         Now.UtcDateTime,
         null);
+
+    private static PatientSearchResponse SearchResponse()
+    {
+        var item = new PatientSearchResult(
+            Guid.NewGuid(),
+            "PAT-000024",
+            "200012345678",
+            "Nimali Perera",
+            new DateOnly(2000, 5, 15),
+            "0771234567",
+            "nimali@example.com",
+            "Colombo");
+
+        return new PatientSearchResponse([item], 1, 1, 20, 1, false, false);
+    }
 
     private sealed class StubRegistrationService : IPatientRegistrationService
     {

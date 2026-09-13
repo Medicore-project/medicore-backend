@@ -1,10 +1,11 @@
 using MediCore.Patient.Application.Interfaces;
+using MediCore.Patient.Application.DTOs;
 using Microsoft.EntityFrameworkCore;
 using PatientEntity = MediCore.Patient.Application.Entities.Patient;
 
 namespace MediCore.Patient.Infrastructure.Persistence.Repositories;
 
-public sealed class PatientRepository : IPatientRepository
+public sealed class PatientRepository : IPatientRepository, IPatientSearchRepository
 {
     private readonly PatientDbContext _dbContext;
 
@@ -50,4 +51,62 @@ public sealed class PatientRepository : IPatientRepository
         return _dbContext.Patients
             .SingleOrDefaultAsync(patient => patient.Id == patientId, cancellationToken);
     }
+
+    public async Task<PatientSearchResponse> SearchAsync(
+        string searchTerm,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var escapedTerm = EscapeLikePattern(searchTerm);
+        var containsPattern = $"%{escapedTerm}%";
+        var normalizedIdentifier = searchTerm.ToUpperInvariant();
+
+        var query = _dbContext.Patients
+            .AsNoTracking()
+            .Where(patient =>
+                EF.Functions.ILike(patient.FirstName, containsPattern, @"\") ||
+                EF.Functions.ILike(patient.LastName, containsPattern, @"\") ||
+                EF.Functions.ILike(patient.FirstName + " " + patient.LastName, containsPattern, @"\") ||
+                EF.Functions.ILike(patient.Nic, containsPattern, @"\") ||
+                EF.Functions.ILike(patient.PatientNumber, containsPattern, @"\"));
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(patient =>
+                patient.Nic == normalizedIdentifier || patient.PatientNumber == normalizedIdentifier)
+            .ThenBy(patient => patient.LastName)
+            .ThenBy(patient => patient.FirstName)
+            .ThenBy(patient => patient.PatientNumber)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(patient => new PatientSearchResult(
+                patient.Id,
+                patient.PatientNumber,
+                patient.Nic,
+                patient.FirstName + " " + patient.LastName,
+                patient.DateOfBirth,
+                patient.Phone,
+                patient.Email,
+                patient.District))
+            .ToListAsync(cancellationToken);
+
+        var totalPages = totalCount == 0
+            ? 0
+            : (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        return new PatientSearchResponse(
+            items,
+            totalCount,
+            page,
+            pageSize,
+            totalPages,
+            page > 1 && totalCount > 0,
+            page < totalPages);
+    }
+
+    private static string EscapeLikePattern(string value) => value
+        .Replace(@"\", @"\\", StringComparison.Ordinal)
+        .Replace("%", @"\%", StringComparison.Ordinal)
+        .Replace("_", @"\_", StringComparison.Ordinal);
 }

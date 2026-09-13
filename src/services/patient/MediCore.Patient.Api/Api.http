@@ -52,3 +52,10 @@ X-Correlation-ID: scrum-24-update-profile
 DELETE {{PatientApi}}/api/patients/{{patientId}}
 Authorization: Bearer {{accessToken}}
 X-Correlation-ID: scrum-24-delete-profile
+
+###
+
+### Search active patients by name, NIC or patient number
+GET {{PatientApi}}/api/patients/search?q=Perera&page=1&pageSize=20
+Authorization: Bearer {{accessToken}}
+X-Correlation-ID: scrum-25-search-patients
