@@ -208,8 +208,30 @@ public sealed class MedicalRecordServiceTests
         Assert.NotNull(result);
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.TotalPages);
+        Assert.Equal("Original clinical note.", result.Items[0].ClinicalNotesPreview);
+        Assert.Equal(1, result.Items[0].ConditionCount);
         Assert.Equal(2, fixture.Audits.Added.Count);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Timeline_summary_normalizes_and_truncates_long_clinical_notes()
+    {
+        var patient = ExistingPatient();
+        var record = ExistingRecord(patient.Id);
+        record.ClinicalNotes = $"  {new string('A', 250)}\nfollow-up  ";
+        var fixture = new Fixture(patient, record);
+
+        var result = await fixture.Service.GetPageAsync(
+            patient.Id,
+            new MedicalRecordListRequest(),
+            Access);
+
+        Assert.NotNull(result);
+        var preview = Assert.Single(result.Items).ClinicalNotesPreview;
+        Assert.Equal(241, preview.Length);
+        Assert.EndsWith("…", preview);
+        Assert.DoesNotContain('\n', preview);
     }
 
     [Fact]

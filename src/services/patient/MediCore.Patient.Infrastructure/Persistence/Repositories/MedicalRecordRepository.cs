@@ -48,6 +48,7 @@ public sealed class MedicalRecordRepository : IMedicalRecordRepository
     {
         var query = _dbContext.MedicalRecords
             .AsNoTracking()
+            .Include(record => record.Conditions)
             .Where(record => record.PatientId == patientId && record.IsCurrent);
 
         var totalCount = await query.CountAsync(cancellationToken);

@@ -32,7 +32,8 @@ public sealed class MedicalRecordsController : ControllerBase
         _service = service;
     }
 
-    /// <summary>Gets the current medical record entries for an active patient.</summary>
+    /// <summary>Gets the current medical record entries for an active patient as a newest-first timeline.</summary>
+    /// <remarks>Each entry includes a clinical-note preview and condition count. Results are paginated.</remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedMedicalRecordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]

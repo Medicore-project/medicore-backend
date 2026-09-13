@@ -34,6 +34,8 @@ public sealed record MedicalRecordSummaryResponse(
     Guid VersionId,
     Guid PatientId,
     Guid VisitReference,
+    string ClinicalNotesPreview,
+    int ConditionCount,
     string AuthorClinicianId,
     string AuthorClinicianEmail,
     string AuthorClinicianRole,

@@ -9,6 +9,7 @@ namespace MediCore.Patient.Application.Services;
 
 public sealed class MedicalRecordService : IMedicalRecordService
 {
+    private const int ClinicalNotesPreviewLength = 240;
     private readonly IPatientRepository _patientRepository;
     private readonly IMedicalRecordRepository _recordRepository;
     private readonly IPatientAuditRepository _auditRepository;
@@ -281,11 +282,24 @@ public sealed class MedicalRecordService : IMedicalRecordService
         record.Id,
         record.PatientId,
         record.VisitReference,
+        CreateClinicalNotesPreview(record.ClinicalNotes),
+        record.Conditions.Count,
         record.AuthorClinicianId,
         record.AuthorClinicianEmail,
         record.AuthorClinicianRole,
         record.AuthoredAtUtc,
         record.Version);
+
+    private static string CreateClinicalNotesPreview(string clinicalNotes)
+    {
+        var normalized = string.Join(
+            " ",
+            clinicalNotes.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        return normalized.Length <= ClinicalNotesPreviewLength
+            ? normalized
+            : $"{normalized[..ClinicalNotesPreviewLength].TrimEnd()}…";
+    }
 
     private static MedicalRecordResponse ToResponse(MedicalRecordEntity record) => new(
         record.RecordId,
