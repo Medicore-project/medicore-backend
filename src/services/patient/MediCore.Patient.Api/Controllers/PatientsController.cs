@@ -15,19 +15,25 @@ public sealed class PatientsController : ControllerBase
 {
     private readonly IValidator<CreatePatientRequest> _validator;
     private readonly IValidator<UpdatePatientRequest> _updateValidator;
+    private readonly IValidator<PatientSearchRequest> _searchValidator;
     private readonly IPatientRegistrationService _registrationService;
     private readonly IPatientProfileService _profileService;
+    private readonly IPatientSearchService _searchService;
 
     public PatientsController(
         IValidator<CreatePatientRequest> validator,
         IValidator<UpdatePatientRequest> updateValidator,
+        IValidator<PatientSearchRequest> searchValidator,
         IPatientRegistrationService registrationService,
-        IPatientProfileService profileService)
+        IPatientProfileService profileService,
+        IPatientSearchService searchService)
     {
         _validator = validator;
         _updateValidator = updateValidator;
+        _searchValidator = searchValidator;
         _registrationService = registrationService;
         _profileService = profileService;
+        _searchService = searchService;
     }
 
     /// <summary>Registers a new patient and schedules a patient.registered event.</summary>
@@ -70,6 +76,34 @@ public sealed class PatientsController : ControllerBase
                 duplicate.ExistingPatient)),
             _ => throw new InvalidOperationException("Unknown patient registration result.")
         };
+    }
+
+    /// <summary>Searches active patients by name, NIC or patient number.</summary>
+    /// <remarks>
+    /// Results are paginated and ordered with exact NIC or patient-number matches first.
+    /// A blank query or a query with no matches returns an empty page.
+    /// </remarks>
+    [HttpGet("search")]
+    [ProducesResponseType(typeof(PatientSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Search(
+        [FromQuery] PatientSearchRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await _searchValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return CreateValidationProblem(validation.Errors, "Patient search validation failed.");
+        }
+
+        var result = await _searchService.SearchAsync(
+            request,
+            CreateAccessContext(),
+            cancellationToken);
+
+        return Ok(result);
     }
 
     /// <summary>Gets an active patient profile and records the access in the audit log.</summary>
