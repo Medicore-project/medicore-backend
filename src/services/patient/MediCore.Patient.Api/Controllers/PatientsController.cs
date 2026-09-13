@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using FluentValidation;
+using MediCore.Patient.Api.Authorization;
 using MediCore.Patient.Api.Middleware;
 using MediCore.Patient.Application.DTOs;
 using MediCore.Patient.Application.Services;
@@ -9,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MediCore.Patient.Api.Controllers;
 
 [ApiController]
-[Authorize(Policy = "FrontDesk")]
+[Authorize]
 [Route("api/patients")]
 public sealed class PatientsController : ControllerBase
 {
@@ -38,6 +39,7 @@ public sealed class PatientsController : ControllerBase
 
     /// <summary>Registers a new patient and schedules a patient.registered event.</summary>
     [HttpPost]
+    [Authorize(Policy = PatientAuthorizationPolicies.FrontDesk)]
     [ProducesResponseType(typeof(PatientRegistrationResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(DuplicatePatientResponse), StatusCodes.Status409Conflict)]
@@ -84,6 +86,7 @@ public sealed class PatientsController : ControllerBase
     /// A blank query or a query with no matches returns an empty page.
     /// </remarks>
     [HttpGet("search")]
+    [Authorize(Policy = PatientAuthorizationPolicies.PatientReader)]
     [ProducesResponseType(typeof(PatientSearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -108,6 +111,7 @@ public sealed class PatientsController : ControllerBase
 
     /// <summary>Gets an active patient profile and records the access in the audit log.</summary>
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = PatientAuthorizationPolicies.PatientReader)]
     [ProducesResponseType(typeof(PatientProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -124,6 +128,7 @@ public sealed class PatientsController : ControllerBase
 
     /// <summary>Updates an active patient's personal and contact details.</summary>
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = PatientAuthorizationPolicies.FrontDesk)]
     [ProducesResponseType(typeof(PatientProfileResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -156,6 +161,7 @@ public sealed class PatientsController : ControllerBase
 
     /// <summary>Soft-deletes an active patient profile.</summary>
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PatientAuthorizationPolicies.FrontDesk)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

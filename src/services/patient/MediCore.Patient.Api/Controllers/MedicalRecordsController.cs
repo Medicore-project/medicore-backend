@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using FluentValidation;
 using FluentValidation.Results;
+using MediCore.Patient.Api.Authorization;
 using MediCore.Patient.Api.Middleware;
 using MediCore.Patient.Application.DTOs;
 using MediCore.Patient.Application.Services;
@@ -100,6 +101,7 @@ public sealed class MedicalRecordsController : ControllerBase
 
     /// <summary>Creates a medical record entry for an active patient.</summary>
     [HttpPost]
+    [Authorize(Policy = PatientAuthorizationPolicies.ClinicalRecordWriter)]
     [ProducesResponseType(typeof(MedicalRecordResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -135,6 +137,7 @@ public sealed class MedicalRecordsController : ControllerBase
 
     /// <summary>Creates a new version of an existing medical record entry.</summary>
     [HttpPut("{recordId:guid}")]
+    [Authorize(Policy = PatientAuthorizationPolicies.ClinicalRecordWriter)]
     [ProducesResponseType(typeof(MedicalRecordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -176,6 +179,7 @@ public sealed class MedicalRecordsController : ControllerBase
 
     /// <summary>Soft-deletes the current medical record entry.</summary>
     [HttpDelete("{recordId:guid}")]
+    [Authorize(Policy = PatientAuthorizationPolicies.ClinicalRecordWriter)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
