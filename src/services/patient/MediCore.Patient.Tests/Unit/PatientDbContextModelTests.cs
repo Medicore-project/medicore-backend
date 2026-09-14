@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using ConditionEntity = MediCore.Patient.Application.Entities.Condition;
 using MedicalRecordEntity = MediCore.Patient.Application.Entities.MedicalRecord;
 using PatientEntity = MediCore.Patient.Application.Entities.Patient;
+using ProcessedMessageEntity = MediCore.Patient.Application.Entities.ProcessedMessage;
 
 namespace MediCore.Patient.Tests.Unit;
 
@@ -76,6 +77,18 @@ public sealed class PatientDbContextModelTests
 
         Assert.Equal(DeleteBehavior.Restrict, patientForeignKey.DeleteBehavior);
         Assert.Equal(DeleteBehavior.Restrict, conditionForeignKey.DeleteBehavior);
+    }
+
+    [Fact]
+    public void Processed_message_id_is_the_database_primary_key()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(ProcessedMessageEntity));
+
+        Assert.NotNull(entityType);
+        var primaryKey = Assert.IsAssignableFrom<IKey>(entityType.FindPrimaryKey());
+        Assert.Equal("pk_processed_messages", primaryKey.GetName());
+        Assert.Equal(nameof(ProcessedMessageEntity.MessageId), Assert.Single(primaryKey.Properties).Name);
     }
 
     private static PatientDbContext CreateContext()
