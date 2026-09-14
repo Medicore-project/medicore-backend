@@ -302,7 +302,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__PatientDatabase: ${PATIENT_DB_CONNECTION}
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Key: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}

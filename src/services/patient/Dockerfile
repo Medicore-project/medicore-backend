@@ -76,6 +76,8 @@ WORKDIR /app
 # Copy published output
 COPY --from=publish /app/publish .
 
+USER root
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 USER app
 
 EXPOSE 8080
