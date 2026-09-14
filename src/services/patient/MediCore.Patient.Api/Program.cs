@@ -1,5 +1,6 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using MediCore.Patient.Api.Authorization;
 using MediCore.Patient.Api.Middleware;
 using MediCore.Patient.Application;
 using MediCore.Patient.Infrastructure;
@@ -56,8 +57,7 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("FrontDesk", policy => policy.RequireRole("Admin", "Receptionist"));
+builder.Services.AddPatientAuthorization();
 
 builder.Services.AddRateLimiter(options =>
 {
