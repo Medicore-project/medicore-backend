@@ -78,6 +78,7 @@ public sealed class PrescriptionsController : ControllerBase
     [ProducesResponseType(typeof(PrescriptionResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AllergyConflictResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Create(
@@ -100,6 +101,8 @@ public sealed class PrescriptionsController : ControllerBase
                 new { patientId, prescriptionId = created.Prescription.PrescriptionId },
                 created.Prescription),
             PrescriptionCreatePatientNotFoundResult => NotFound(),
+            PrescriptionCreateAllergyConflictResult conflict => Conflict(
+                new AllergyConflictResponse(true, conflict.ConflictingAllergy)),
             _ => throw new InvalidOperationException("Unknown prescription creation result.")
         };
     }

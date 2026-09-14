@@ -9,7 +9,13 @@ public sealed record CreatePrescriptionRequest(
     string Frequency,
     int DurationDays,
     Guid? MedicalRecordId,
-    string? Notes);
+    string? Notes,
+    /// <summary>
+    /// When <c>true</c>, the allergy conflict guard is bypassed and the
+    /// prescription is saved with an audit entry noting the override.
+    /// Defaults to <c>false</c> so conflict is enforced by default.
+    /// </summary>
+    bool OverrideConflict = false);
 
 /// <summary>Updates the mutable fields of an active prescription.</summary>
 public sealed record UpdatePrescriptionRequest(

@@ -9,6 +9,13 @@ public abstract record PrescriptionCreateResult;
 public sealed record PrescriptionCreatedResult(PrescriptionResponse Prescription) : PrescriptionCreateResult;
 public sealed record PrescriptionCreatePatientNotFoundResult : PrescriptionCreateResult;
 
+/// <summary>
+/// Returned when the drug being prescribed matches an active allergen for the patient
+/// and <c>OverrideConflict</c> is <c>false</c>.
+/// The controller maps this to HTTP 409 with an <see cref="AllergyConflictResponse"/> body.
+/// </summary>
+public sealed record PrescriptionCreateAllergyConflictResult(AllergyResponse ConflictingAllergy) : PrescriptionCreateResult;
+
 public abstract record PrescriptionUpdateResult;
 public sealed record PrescriptionUpdatedResult(PrescriptionResponse Prescription) : PrescriptionUpdateResult;
 public sealed record PrescriptionUpdateNotFoundResult : PrescriptionUpdateResult;

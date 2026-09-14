@@ -14,6 +14,7 @@ public sealed class PrescriptionService : IPrescriptionService
 {
     private readonly IPatientRepository _patientRepository;
     private readonly IPrescriptionRepository _prescriptionRepository;
+    private readonly IAllergyRepository _allergyRepository;
     private readonly IPatientAuditRepository _auditRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
@@ -21,12 +22,14 @@ public sealed class PrescriptionService : IPrescriptionService
     public PrescriptionService(
         IPatientRepository patientRepository,
         IPrescriptionRepository prescriptionRepository,
+        IAllergyRepository allergyRepository,
         IPatientAuditRepository auditRepository,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider)
     {
         _patientRepository = patientRepository;
         _prescriptionRepository = prescriptionRepository;
+        _allergyRepository = allergyRepository;
         _auditRepository = auditRepository;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
@@ -90,6 +93,32 @@ public sealed class PrescriptionService : IPrescriptionService
             return new PrescriptionCreatePatientNotFoundResult();
         }
 
+        // ── Allergy conflict check ─────────────────────────────────────────────
+        // Only active allergies are matched; case-insensitive substring comparison.
+        // When the caller sets OverrideConflict = true the guard is bypassed and
+        // the override is recorded in the audit trail.
+        if (!request.OverrideConflict)
+        {
+            var conflict = await _allergyRepository.CheckConflictAsync(
+                patientId, request.Drug.Trim(), cancellationToken);
+
+            if (conflict is not null)
+            {
+                return new PrescriptionCreateAllergyConflictResult(new DTOs.AllergyResponse(
+                    conflict.AllergyId,
+                    conflict.PatientId,
+                    conflict.Allergen,
+                    conflict.Severity,
+                    conflict.Reaction,
+                    conflict.Status,
+                    conflict.RecordedAtUtc,
+                    conflict.Notes,
+                    conflict.RecordedByClinicianId,
+                    conflict.RecordedByClinicianEmail,
+                    conflict.RecordedByClinicianRole));
+            }
+        }
+
         var actorId = Normalize(accessContext.ActorId, "system");
         var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
 
@@ -111,11 +140,13 @@ public sealed class PrescriptionService : IPrescriptionService
         };
 
         await _prescriptionRepository.AddAsync(prescription, cancellationToken);
-        await AddAuditAsync(
-            patientId,
-            $"PrescriptionCreated:{prescription.PrescriptionId}",
-            accessContext,
-            cancellationToken);
+
+        // Use a distinct audit action so conflict overrides are queryable.
+        var auditAction = request.OverrideConflict
+            ? $"PrescriptionCreatedWithAllergyOverride:{prescription.PrescriptionId}"
+            : $"PrescriptionCreated:{prescription.PrescriptionId}";
+
+        await AddAuditAsync(patientId, auditAction, accessContext, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PrescriptionCreatedResult(ToResponse(prescription));
