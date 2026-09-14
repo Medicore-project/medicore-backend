@@ -38,6 +38,54 @@ public sealed record DemographicsReportSourceRow(
     Guid? VisitReference,
     DateTime? VisitAtUtc);
 
+public enum DemographicsReportFormat
+{
+    Json,
+    Csv,
+    Pdf
+}
+
+public sealed record AppliedDemographicsFilters(
+    string? AgeBand,
+    string? Gender,
+    string? District,
+    DateOnly? From,
+    DateOnly? To);
+
+public sealed record DemographicsBreakdownRow(
+    string Label,
+    int PatientCount,
+    int VisitCount);
+
+public sealed record VisitHistoryBucket(
+    string Period,
+    DateOnly PeriodStart,
+    int VisitCount);
+
+public sealed record DemographicsPatientSummary(
+    Guid PatientId,
+    string PatientNumber,
+    int Age,
+    string AgeBand,
+    string Gender,
+    string District,
+    int VisitCount,
+    DateTime? FirstVisitAtUtc,
+    DateTime? LatestVisitAtUtc);
+
+public sealed record DemographicsReportResponse(
+    DateTime GeneratedAtUtc,
+    AppliedDemographicsFilters AppliedFilters,
+    int TotalPatients,
+    int TotalVisits,
+    int PatientsWithVisits,
+    int PatientsWithoutVisits,
+    IReadOnlyList<DemographicsBreakdownRow> AgeBands,
+    IReadOnlyList<DemographicsBreakdownRow> Genders,
+    IReadOnlyList<DemographicsBreakdownRow> Districts,
+    IReadOnlyList<VisitHistoryBucket> VisitHistory,
+    IReadOnlyList<DemographicsPatientSummary> Patients);
+
 public readonly record struct DemographicsAgeRange(int MinimumAge, int? MaximumAge);
 
 public static class DemographicsReportOptions
