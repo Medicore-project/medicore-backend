@@ -28,10 +28,26 @@ public static class DependencyInjection
         services.AddScoped<IMedicalRecordRepository, MedicalRecordRepository>();
         services.AddScoped<IPatientAuditRepository, PatientAuditRepository>();
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
+        services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
         services.AddScoped<IUnitOfWork, PatientUnitOfWork>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
             ?? throw new InvalidOperationException("Kafka setting 'Kafka:BootstrapServers' is missing.");
+        var retryDelaySeconds = int.TryParse(
+            configuration["Kafka:AppointmentConsumer:RetryDelaySeconds"],
+            out var configuredRetryDelaySeconds)
+            ? Math.Max(0, configuredRetryDelaySeconds)
+            : 2;
+
+        var appointmentConsumerOptions = new AppointmentConsumerOptions
+        {
+            BootstrapServers = kafkaBootstrapServers,
+            Topic = configuration["Kafka:AppointmentConsumer:Topic"]
+                ?? AppointmentConsumerOptions.DefaultTopic,
+            GroupId = configuration["Kafka:AppointmentConsumer:GroupId"]
+                ?? AppointmentConsumerOptions.DefaultGroupId,
+            RetryDelay = TimeSpan.FromSeconds(retryDelaySeconds)
+        };
 
         services.AddSingleton<IProducer<string, string>>(_ =>
             new ProducerBuilder<string, string>(new ProducerConfig
@@ -42,7 +58,11 @@ public static class DependencyInjection
             }).Build());
 
         services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
+        services.AddSingleton(appointmentConsumerOptions);
+        services.AddSingleton<IAppointmentKafkaConsumerFactory, AppointmentKafkaConsumerFactory>();
+        services.AddScoped<IAppointmentEventProcessor, AppointmentEventProcessor>();
         services.AddHostedService<OutboxProcessor>();
+        services.AddHostedService<AppointmentCompletedConsumer>();
 
         return services;
     }

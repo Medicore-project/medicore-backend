@@ -8,6 +8,7 @@ namespace MediCore.Patient.Infrastructure.Persistence;
 public sealed class PatientUnitOfWork : IUnitOfWork
 {
     private const string NicConstraintName = "ux_patients_nic";
+    private const string ProcessedMessageConstraintName = "pk_processed_messages";
     private static readonly string[] MedicalRecordVersionConstraints =
     [
         "ux_medical_records_current_record",
@@ -36,6 +37,16 @@ public sealed class PatientUnitOfWork : IUnitOfWork
         {
             _dbContext.ChangeTracker.Clear();
             throw new MedicalRecordVersionConflictException(exception);
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: ProcessedMessageConstraintName
+            })
+        {
+            _dbContext.ChangeTracker.Clear();
+            throw new DuplicateProcessedMessageException(exception);
         }
     }
 
