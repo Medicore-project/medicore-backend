@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MediCore.Patient.Api\Api.csproj" />
     <ProjectReference Include="..\MediCore.Patient.Application\Application.csproj" />
+    <ProjectReference Include="..\MediCore.Patient.Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

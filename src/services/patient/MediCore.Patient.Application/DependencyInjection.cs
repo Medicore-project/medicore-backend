@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<IPrescriptionService, PrescriptionService>();
         services.AddScoped<IAllergyService, AllergyService>();
         services.AddScoped<IAppointmentCompletedHandler, AppointmentCompletedHandler>();
+        services.AddScoped<IDemographicsReportService, DemographicsReportService>();
         services.AddSingleton(TimeProvider.System);
         return services;
     }
