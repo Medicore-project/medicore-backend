@@ -1,5 +1,5 @@
 # =============================================================================
-# MediCore Identity Service — Multi-Stage Dockerfile
+# MediCore Patient Service — Multi-Stage Dockerfile
 # =============================================================================
 # Stages:
 #   build   — SDK image: restore + build
@@ -19,18 +19,18 @@ FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS build
 WORKDIR /src
 
 # Copy project files first — Docker layer cache: only re-restores when .csproj changes
-COPY ["src/services/identity/MediCore.Identity.Api/Api.csproj",              "src/services/identity/MediCore.Identity.Api/"]
-COPY ["src/services/identity/MediCore.Identity.Application/Application.csproj", "src/services/identity/MediCore.Identity.Application/"]
-COPY ["src/services/identity/MediCore.Identity.Infrastructure/Infrastructure.csproj", "src/services/identity/MediCore.Identity.Infrastructure/"]
-COPY ["src/shared/MediCore.Contracts/Contracts.csproj",                       "src/shared/MediCore.Contracts/"]
+COPY ["src/services/patient/MediCore.Patient.Api/Api.csproj",                    "src/services/patient/MediCore.Patient.Api/"]
+COPY ["src/services/patient/MediCore.Patient.Application/Application.csproj",    "src/services/patient/MediCore.Patient.Application/"]
+COPY ["src/services/patient/MediCore.Patient.Infrastructure/Infrastructure.csproj", "src/services/patient/MediCore.Patient.Infrastructure/"]
+COPY ["src/shared/MediCore.Contracts/Contracts.csproj",                           "src/shared/MediCore.Contracts/"]
 
-RUN dotnet restore "src/services/identity/MediCore.Identity.Api/Api.csproj"
+RUN dotnet restore "src/services/patient/MediCore.Patient.Api/Api.csproj"
 
 # Copy source and build
-COPY src/services/identity/ src/services/identity/
-COPY src/shared/             src/shared/
+COPY src/services/patient/ src/services/patient/
+COPY src/shared/            src/shared/
 
-WORKDIR "/src/src/services/identity/MediCore.Identity.Api"
+WORKDIR "/src/src/services/patient/MediCore.Patient.Api"
 RUN dotnet build "Api.csproj" --configuration Release --no-restore
 
 # ── Stage 2: Test ─────────────────────────────────────────────────────────────
@@ -38,20 +38,20 @@ FROM build AS test
 WORKDIR /src
 
 # Copy test project
-COPY ["src/services/identity/MediCore.Identity.Tests/Tests.csproj", "src/services/identity/MediCore.Identity.Tests/"]
-RUN dotnet restore "src/services/identity/MediCore.Identity.Tests/Tests.csproj"
+COPY ["src/services/patient/MediCore.Patient.Tests/Tests.csproj", "src/services/patient/MediCore.Patient.Tests/"]
+RUN dotnet restore "src/services/patient/MediCore.Patient.Tests/Tests.csproj"
 
-COPY src/services/identity/MediCore.Identity.Tests/ src/services/identity/MediCore.Identity.Tests/
+COPY src/services/patient/MediCore.Patient.Tests/ src/services/patient/MediCore.Patient.Tests/
 
 # Run tests — this stage fails the build if any test fails
-RUN dotnet test "src/services/identity/MediCore.Identity.Tests/Tests.csproj" \
+RUN dotnet test "src/services/patient/MediCore.Patient.Tests/Tests.csproj" \
     --configuration Release \
     --no-restore \
     --logger "console;verbosity=normal"
 
 # ── Stage 3: Publish ──────────────────────────────────────────────────────────
 FROM build AS publish
-WORKDIR "/src/src/services/identity/MediCore.Identity.Api"
+WORKDIR "/src/src/services/patient/MediCore.Patient.Api"
 RUN dotnet publish "Api.csproj" \
     --configuration Release \
     --no-build \
@@ -66,8 +66,8 @@ ARG BUILD_DATE
 ARG GIT_SHA
 LABEL org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.revision="${GIT_SHA}" \
-      org.opencontainers.image.title="MediCore Identity Service" \
-      org.opencontainers.image.description="Identity and authentication microservice" \
+      org.opencontainers.image.title="MediCore Patient Service" \
+      org.opencontainers.image.description="Patient and Medical Records microservice" \
       org.opencontainers.image.vendor="MediCore Team" \
       org.opencontainers.image.licenses="MIT"
 
@@ -89,4 +89,4 @@ ENV ASPNETCORE_URLS=http://+:8080 \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:8080/health/live || exit 1
 
-ENTRYPOINT ["dotnet", "Api.dll"]
+ENTRYPOINT ["dotnet", "MediCore.Patient.Api.dll"]

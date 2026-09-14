@@ -4,6 +4,8 @@ using MediCore.Patient.Api.Authorization;
 using MediCore.Patient.Api.Middleware;
 using MediCore.Patient.Application;
 using MediCore.Patient.Infrastructure;
+using MediCore.Patient.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
@@ -76,6 +78,25 @@ builder.Services.AddHealthChecks()
     .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"]);
 
 var app = builder.Build();
+
+// ---------------------------------------------------------------------------
+// Auto-run EF Core migrations on startup
+// ---------------------------------------------------------------------------
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<PatientDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        logger.LogInformation("Applying EF Core migrations...");
+        db.Database.Migrate();
+        logger.LogInformation("EF Core migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to apply EF Core migrations. The app will still start.");
+    }
+}
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
