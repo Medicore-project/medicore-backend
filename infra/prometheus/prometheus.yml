@@ -68,7 +68,8 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - host.docker.internal:5002
+          - medicore-patient:8080       # Docker container (Compose)
+          - host.docker.internal:5002   # host machine (dotnet run)
         labels:
           service: patient
           env: local
