@@ -14,6 +14,7 @@ public sealed class PatientDbContext : DbContext
     public DbSet<PatientEntity> Patients => Set<PatientEntity>();
     public DbSet<MedicalRecord> MedicalRecords => Set<MedicalRecord>();
     public DbSet<Condition> Conditions => Set<Condition>();
+    public DbSet<Prescription> Prescriptions => Set<Prescription>();
     public DbSet<PatientAuditLog> PatientAuditLogs => Set<PatientAuditLog>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
