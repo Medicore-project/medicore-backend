@@ -25,4 +25,8 @@
     <ProjectReference Include="..\MediCore.Patient.Application\Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="MediCore.Patient.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -3,6 +3,7 @@ using MediCore.Patient.Application.Interfaces;
 using MediCore.Patient.Infrastructure.Messaging;
 using MediCore.Patient.Infrastructure.Persistence;
 using MediCore.Patient.Infrastructure.Persistence.Repositories;
+using MediCore.Patient.Infrastructure.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IPatientAuditRepository, PatientAuditRepository>();
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
+        services.AddScoped<IDemographicsReportQuery, DemographicsReportQuery>();
         services.AddScoped<IUnitOfWork, PatientUnitOfWork>();
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
