@@ -161,7 +161,7 @@ services:
     networks:
       - medicore-net
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "curl", "-s", "-f", "http://localhost:80/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -268,7 +268,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__IdentityDatabase: ${IDENTITY_DB_CONNECTION}
-      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Key: ${JWT_SECRET}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}
