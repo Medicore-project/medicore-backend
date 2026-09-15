@@ -18,6 +18,19 @@
   <Folder Name="/src/services/identity/MediCore.Identity.Tests/">
     <Project Path="src/services/identity/MediCore.Identity.Tests/Tests.csproj" />
   </Folder>
+  <Folder Name="/src/services/patient/" />
+  <Folder Name="/src/services/patient/MediCore.Patient.Api/">
+    <Project Path="src/services/patient/MediCore.Patient.Api/Api.csproj" />
+  </Folder>
+  <Folder Name="/src/services/patient/MediCore.Patient.Application/">
+    <Project Path="src/services/patient/MediCore.Patient.Application/Application.csproj" />
+  </Folder>
+  <Folder Name="/src/services/patient/MediCore.Patient.Infrastructure/">
+    <Project Path="src/services/patient/MediCore.Patient.Infrastructure/Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/services/patient/MediCore.Patient.Tests/">
+    <Project Path="src/services/patient/MediCore.Patient.Tests/Tests.csproj" />
+  </Folder>
   <Folder Name="/src/shared/">
     <Project Path="src/shared/MediCore.Contracts/Contracts.csproj" />
   </Folder>

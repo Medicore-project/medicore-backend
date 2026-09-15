@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <!-- Coverage is graded on business logic, not EF migrations or dependency wiring. -->
+          <Exclude>[MediCore.Patient.Infrastructure]*,[MediCore.Contracts]*</Exclude>
+          <ExcludeByFile>**/Program.cs</ExcludeByFile>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
