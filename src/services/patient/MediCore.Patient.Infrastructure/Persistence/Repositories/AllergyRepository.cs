@@ -77,20 +77,19 @@ public sealed class AllergyRepository : IAllergyRepository
     public Task<AllergyEntity?> CheckConflictAsync(
         Guid patientId,
         string drug,
-        CancellationToken cancellationToken = default)
-    {
-        var drugLower = drug.ToLowerInvariant();
+        CancellationToken cancellationToken = default) =>
+        BuildConflictQuery(patientId, drug)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        return _db.Allergies
+    internal IQueryable<AllergyEntity> BuildConflictQuery(Guid patientId, string drug) =>
+        _db.Allergies
             .AsNoTracking()
             .Where(a =>
                 a.PatientId == patientId &&
                 a.Status == AllergyStatus.Active &&
                 (
                     EF.Functions.ILike(a.Allergen, $"%{drug}%") ||
-                    EF.Functions.ILike(drug, $"%{a.Allergen}%")
+                    EF.Functions.ILike(drug, "%" + a.Allergen + "%")
                 ))
-            .OrderByDescending(a => a.RecordedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
-    }
+            .OrderByDescending(a => a.RecordedAtUtc);
 }
