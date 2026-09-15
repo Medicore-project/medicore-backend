@@ -55,6 +55,7 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
+          - medicore-identity:8080      # Docker container (Compose)
           - host.docker.internal:5001   # host machine (dotnet run)
         labels:
           service: identity
