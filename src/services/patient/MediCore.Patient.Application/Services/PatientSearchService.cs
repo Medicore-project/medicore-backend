@@ -28,11 +28,7 @@ public sealed class PatientSearchService : IPatientSearchService
         PatientAccessContext accessContext,
         CancellationToken cancellationToken = default)
     {
-        var searchTerm = request.Q?.Trim();
-        if (string.IsNullOrEmpty(searchTerm))
-        {
-            return PatientSearchResponse.Empty(request.Page, request.PageSize);
-        }
+        var searchTerm = request.Q?.Trim() ?? string.Empty;
 
         var result = await _searchRepository.SearchAsync(
             searchTerm,
