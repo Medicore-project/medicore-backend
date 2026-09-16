@@ -3,6 +3,7 @@ using System;
 using MediCore.Patient.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MediCore.Patient.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PatientDbContext))]
-    partial class PatientDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260914143037_AddPrescriptions")]
+    partial class AddPrescriptions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -24,96 +27,6 @@ namespace MediCore.Patient.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.HasSequence("patient_number_seq", "medicore_patient");
-
-            modelBuilder.Entity("MediCore.Patient.Application.Entities.Allergy", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AllergyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PatientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Allergen")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Severity")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("Reaction")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Active");
-
-                    b.Property<DateTime>("RecordedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("RecordedByClinicianId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("RecordedByClinicianEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("RecordedByClinicianRole")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AllergyId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_allergies_allergy_id");
-
-                    b.HasIndex("PatientId", "Status")
-                        .HasDatabaseName("ix_allergies_patient_status");
-
-                    b.HasIndex("PatientId", "RecordedAtUtc")
-                        .HasDatabaseName("ix_allergies_patient_recorded_at");
-
-                    b.ToTable("allergies", "medicore_patient");
-                });
 
             modelBuilder.Entity("MediCore.Patient.Application.Entities.Condition", b =>
                 {
@@ -606,6 +519,8 @@ namespace MediCore.Patient.Infrastructure.Persistence.Migrations
                     b.ToTable("prescriptions", "medicore_patient");
                 });
 
+            // ── Relationships ────────────────────────────────────────────────
+
             modelBuilder.Entity("MediCore.Patient.Application.Entities.Condition", b =>
                 {
                     b.HasOne("MediCore.Patient.Application.Entities.MedicalRecord", "MedicalRecord")
@@ -654,15 +569,6 @@ namespace MediCore.Patient.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("MedicalRecordId")
                         .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("MediCore.Patient.Application.Entities.Allergy", b =>
-                {
-                    b.HasOne("MediCore.Patient.Application.Entities.Patient", null)
-                        .WithMany()
-                        .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("MediCore.Patient.Application.Entities.MedicalRecord", b =>

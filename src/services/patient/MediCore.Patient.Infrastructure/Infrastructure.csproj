@@ -19,10 +19,15 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.*" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.*" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="QuestPDF" Version="2026.8.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MediCore.Patient.Application\Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MediCore.Patient.Tests" />
   </ItemGroup>
 
 </Project>

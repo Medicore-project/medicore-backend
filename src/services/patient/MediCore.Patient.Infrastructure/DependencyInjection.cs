@@ -3,9 +3,11 @@ using MediCore.Patient.Application.Interfaces;
 using MediCore.Patient.Infrastructure.Messaging;
 using MediCore.Patient.Infrastructure.Persistence;
 using MediCore.Patient.Infrastructure.Persistence.Repositories;
+using MediCore.Patient.Infrastructure.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using QuestPDF.Infrastructure;
 
 namespace MediCore.Patient.Infrastructure;
 
@@ -26,10 +28,17 @@ public static class DependencyInjection
         services.AddScoped<IPatientRepository, PatientRepository>();
         services.AddScoped<IPatientSearchRepository, PatientRepository>();
         services.AddScoped<IMedicalRecordRepository, MedicalRecordRepository>();
+        services.AddScoped<IPrescriptionRepository, PrescriptionRepository>();
+        services.AddScoped<IAllergyRepository, AllergyRepository>();
         services.AddScoped<IPatientAuditRepository, PatientAuditRepository>();
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
+        services.AddScoped<IDemographicsReportQuery, DemographicsReportQuery>();
+        services.AddSingleton<IDemographicsCsvExporter, DemographicsCsvExporter>();
+        services.AddSingleton<IDemographicsPdfExporter, DemographicsPdfExporter>();
         services.AddScoped<IUnitOfWork, PatientUnitOfWork>();
+
+        QuestPDF.Settings.License = LicenseType.Community;
 
         var kafkaBootstrapServers = configuration["Kafka:BootstrapServers"]
             ?? throw new InvalidOperationException("Kafka setting 'Kafka:BootstrapServers' is missing.");
