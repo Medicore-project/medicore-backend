@@ -25,6 +25,7 @@ public sealed class DemographicsReportQueryTests
         Assert.DoesNotContain("mr.\"RecordId\" IS NOT NULL", command.CommandText);
         Assert.Contains("EXTRACT(YEAR FROM AGE(@asOfDate", command.CommandText);
         Assert.Contains("END AS age_band", command.CommandText);
+        Assert.Contains("mr.\"IsCurrent\" = true\nWHERE 1 = 1", command.CommandText);
 
         var parameter = Assert.Single(command.Parameters.Cast<NpgsqlParameter>());
         Assert.Equal("asOfDate", parameter.ParameterName);

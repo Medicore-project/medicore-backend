@@ -122,6 +122,7 @@ public sealed class DemographicsReportQuery : IDemographicsReportQuery
                AND mr."IsDeleted" = false
                AND mr."IsCurrent" = true
             """);
+        sql.AppendLine();
 
         var command = connection.CreateCommand();
         command.Parameters.AddWithValue("asOfDate", NpgsqlDbType.Date, asOfDate);
