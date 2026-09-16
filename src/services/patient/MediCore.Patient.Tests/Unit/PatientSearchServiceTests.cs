@@ -79,7 +79,7 @@ public sealed class PatientSearchServiceTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task Blank_search_returns_empty_page_without_querying_database(string? query)
+    public async Task Blank_search_queries_all_patients(string? query)
     {
         var fixture = new Fixture(SearchResponse());
 
@@ -87,11 +87,11 @@ public sealed class PatientSearchServiceTests
             new PatientSearchRequest(query, 3, 10),
             Access);
 
-        Assert.Empty(result.Items);
-        Assert.Equal(3, result.Page);
-        Assert.Equal(10, result.PageSize);
-        Assert.Equal(0, fixture.Search.CallCount);
-        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+        Assert.NotEmpty(result.Items);
+        Assert.Equal(3, fixture.Search.LastPage);
+        Assert.Equal(10, fixture.Search.LastPageSize);
+        Assert.Equal(1, fixture.Search.CallCount);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
     }
 
     private static PatientSearchResponse SearchResponse(int count = 1)

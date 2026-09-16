@@ -58,26 +58,39 @@ public sealed class PatientRepository : IPatientRepository, IPatientSearchReposi
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var escapedTerm = EscapeLikePattern(searchTerm);
-        var containsPattern = $"%{escapedTerm}%";
-        var normalizedIdentifier = searchTerm.ToUpperInvariant();
-
         var query = _dbContext.Patients
             .AsNoTracking()
-            .Where(patient =>
-                EF.Functions.ILike(patient.FirstName, containsPattern, @"\") ||
-                EF.Functions.ILike(patient.LastName, containsPattern, @"\") ||
-                EF.Functions.ILike(patient.FirstName + " " + patient.LastName, containsPattern, @"\") ||
-                EF.Functions.ILike(patient.Nic, containsPattern, @"\") ||
-                EF.Functions.ILike(patient.PatientNumber, containsPattern, @"\"));
+            .Where(patient => !patient.IsDeleted);
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var escapedTerm = EscapeLikePattern(searchTerm);
+            var containsPattern = $"%{escapedTerm}%";
+            var normalizedIdentifier = searchTerm.ToUpperInvariant();
+
+            query = query
+                .Where(patient =>
+                    EF.Functions.ILike(patient.FirstName, containsPattern, @"\") ||
+                    EF.Functions.ILike(patient.LastName, containsPattern, @"\") ||
+                    EF.Functions.ILike(patient.FirstName + " " + patient.LastName, containsPattern, @"\") ||
+                    EF.Functions.ILike(patient.Nic, containsPattern, @"\") ||
+                    EF.Functions.ILike(patient.PatientNumber, containsPattern, @"\"))
+                .OrderByDescending(patient =>
+                    patient.Nic == normalizedIdentifier || patient.PatientNumber == normalizedIdentifier)
+                .ThenBy(patient => patient.LastName)
+                .ThenBy(patient => patient.FirstName)
+                .ThenBy(patient => patient.PatientNumber);
+        }
+        else
+        {
+            query = query
+                .OrderBy(patient => patient.LastName)
+                .ThenBy(patient => patient.FirstName)
+                .ThenBy(patient => patient.PatientNumber);
+        }
 
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
-            .OrderByDescending(patient =>
-                patient.Nic == normalizedIdentifier || patient.PatientNumber == normalizedIdentifier)
-            .ThenBy(patient => patient.LastName)
-            .ThenBy(patient => patient.FirstName)
-            .ThenBy(patient => patient.PatientNumber)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(patient => new PatientSearchResult(
