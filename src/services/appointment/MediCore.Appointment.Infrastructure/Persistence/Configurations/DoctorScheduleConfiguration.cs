@@ -30,7 +30,10 @@ public sealed class DoctorScheduleConfiguration : IEntityTypeConfiguration<Docto
         // ── Effective period ─────────────────────────────────────────────────
         builder.Property(s => s.EffectiveFrom).HasColumnType("date").IsRequired();
         builder.Property(s => s.EffectiveTo).HasColumnType("date");
-        builder.Property(s => s.IsActive).HasDefaultValue(true).IsRequired();
+        // Deliberately no HasDefaultValue(true): that marks the property ValueGenerated.OnAdd,
+        // and EF then omits any value equal to the CLR default (false) from the INSERT — so a
+        // schedule created as inactive would silently be stored as active.
+        builder.Property(s => s.IsActive).IsRequired();
 
         // ── Audit columns ────────────────────────────────────────────────────
         builder.Property(s => s.IsDeleted).HasDefaultValue(false).IsRequired();
