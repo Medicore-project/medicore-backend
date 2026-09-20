@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediCore.Appointment.Application.Scheduling;
+using MediCore.Appointment.Application.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,6 +18,9 @@ public static class DependencyInjection
             configuration.GetSection(SchedulingOptions.SectionName));
 
         services.AddScoped<ISlotGenerator, SlotGenerator>();
+        services.AddScoped<ISlotReconciler, SlotReconciler>();
+        services.AddScoped<IScheduleOverlapDetector, ScheduleOverlapDetector>();
+        services.AddScoped<IScheduleRevisionService, ScheduleRevisionService>();
 
         // Injected into application services so tests can pin "now" without touching the clock.
         services.AddSingleton(TimeProvider.System);

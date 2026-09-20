@@ -1,4 +1,6 @@
+using MediCore.Appointment.Application.Interfaces;
 using MediCore.Appointment.Infrastructure.Persistence;
+using MediCore.Appointment.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,8 +21,13 @@ public static class DependencyInjection
                 Microsoft.EntityFrameworkCore.Migrations.HistoryRepository.DefaultTableName,
                 AppointmentDbContext.SchemaName)));
 
-        // Repositories, the unit of work and the Kafka outbox are registered in
-        // SCRUM-32 Steps 1 and 5 as the corresponding types are introduced.
+        services.AddScoped<IDoctorScheduleRepository, DoctorScheduleRepository>();
+        services.AddScoped<ISlotRepository, SlotRepository>();
+        services.AddScoped<IPublicHolidayRepository, PublicHolidayRepository>();
+        services.AddScoped<IDoctorLeaveRepository, DoctorLeaveRepository>();
+        services.AddScoped<IUnitOfWork, AppointmentUnitOfWork>();
+
+        // The Kafka outbox processor is wired up when event publishing lands (SCRUM-34).
 
         return services;
     }
