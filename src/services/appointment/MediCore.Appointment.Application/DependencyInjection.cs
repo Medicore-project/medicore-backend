@@ -16,6 +16,8 @@ public static class DependencyInjection
         services.Configure<SchedulingOptions>(
             configuration.GetSection(SchedulingOptions.SectionName));
 
+        services.AddScoped<ISlotGenerator, SlotGenerator>();
+
         // Injected into application services so tests can pin "now" without touching the clock.
         services.AddSingleton(TimeProvider.System);
 
