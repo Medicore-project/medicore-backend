@@ -1,0 +1,4 @@
+# Shell scripts are executed inside Linux containers and must keep LF
+# endings regardless of core.autocrlf on a Windows checkout — a CRLF line
+# breaks `set -euo pipefail` (bash parses "pipefail\r" as an unknown option).
+*.sh text eol=lf
