@@ -321,6 +321,42 @@ services:
       start_period: 30s
 
   # -------------------------------------------------------------------------
+  # Appointment API — Doctor Scheduling and Slot Generation Service
+  # -------------------------------------------------------------------------
+  appointment-api:
+    build:
+      context: .
+      dockerfile: src/services/appointment/Dockerfile
+    image: medicore-appointment:local
+    container_name: medicore-appointment
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__AppointmentDatabase: ${APPOINTMENT_DB_CONNECTION}
+      Jwt__Key: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}
+      Seq__ServerUrl: http://seq:5341
+      Kafka__BootstrapServers: kafka:9092
+      # How far ahead slots are generated. See SchedulingOptions.
+      Scheduling__SlotHorizonDays: ${SLOT_HORIZON_DAYS:-60}
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -------------------------------------------------------------------------
   # API Gateway — YARP reverse proxy
   # Routes:  /identity/**  → identity-api:8080
   #          /patient/**   → patient-api:8080
@@ -340,6 +376,8 @@ services:
       postgres:
         condition: service_healthy
       patient-api:
+        condition: service_healthy
+      appointment-api:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
