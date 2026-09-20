@@ -34,4 +34,22 @@ public interface IDoctorScheduleRepository
     /// </summary>
     Task<IReadOnlyList<Guid>> GetDoctorIdsWithActiveSchedulesAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>Every schedule for one doctor, including paused ones, ordered by weekday.</summary>
+    Task<IReadOnlyList<DoctorSchedule>> GetAllForDoctorAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Returns a non-tracked schedule by its business key, or null.</summary>
+    Task<DoctorSchedule?> GetByScheduleIdAsync(
+        Guid scheduleId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Returns a change-tracked schedule by its business key, for update or delete.</summary>
+    Task<DoctorSchedule?> GetTrackedByScheduleIdAsync(
+        Guid scheduleId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Stages a new schedule for insertion (not yet committed).</summary>
+    Task AddAsync(DoctorSchedule schedule, CancellationToken cancellationToken = default);
 }

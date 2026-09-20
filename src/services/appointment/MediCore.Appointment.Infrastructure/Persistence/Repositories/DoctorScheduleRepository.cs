@@ -53,4 +53,30 @@ public sealed class DoctorScheduleRepository : IDoctorScheduleRepository
             .Select(schedule => schedule.DoctorId)
             .Distinct()
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<DoctorSchedule>> GetAllForDoctorAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DoctorSchedules
+            .AsNoTracking()
+            .Where(schedule => schedule.DoctorId == doctorId)
+            .OrderBy(schedule => schedule.DayOfWeek)
+            .ThenBy(schedule => schedule.StartTime)
+            .ToListAsync(cancellationToken);
+
+    public Task<DoctorSchedule?> GetByScheduleIdAsync(
+        Guid scheduleId,
+        CancellationToken cancellationToken = default) =>
+        _dbContext.DoctorSchedules
+            .AsNoTracking()
+            .SingleOrDefaultAsync(schedule => schedule.ScheduleId == scheduleId, cancellationToken);
+
+    public Task<DoctorSchedule?> GetTrackedByScheduleIdAsync(
+        Guid scheduleId,
+        CancellationToken cancellationToken = default) =>
+        _dbContext.DoctorSchedules
+            .SingleOrDefaultAsync(schedule => schedule.ScheduleId == scheduleId, cancellationToken);
+
+    public Task AddAsync(DoctorSchedule schedule, CancellationToken cancellationToken = default) =>
+        _dbContext.DoctorSchedules.AddAsync(schedule, cancellationToken).AsTask();
 }

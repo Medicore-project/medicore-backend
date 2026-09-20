@@ -32,4 +32,29 @@ public sealed class DoctorLeaveRepository : IDoctorLeaveRepository
                 && leave.EndDate >= from)
             .OrderBy(leave => leave.StartDate)
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<DoctorLeave>> GetAllForDoctorAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DoctorLeaves
+            .AsNoTracking()
+            .Where(leave => leave.DoctorId == doctorId)
+            .OrderByDescending(leave => leave.StartDate)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<DoctorLeave>> GetPendingAsync(
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DoctorLeaves
+            .AsNoTracking()
+            .Where(leave => leave.Status == LeaveStatus.Pending)
+            .OrderBy(leave => leave.StartDate)
+            .ToListAsync(cancellationToken);
+
+    public Task<DoctorLeave?> GetTrackedByLeaveIdAsync(
+        Guid leaveId,
+        CancellationToken cancellationToken = default) =>
+        _dbContext.DoctorLeaves.SingleOrDefaultAsync(leave => leave.LeaveId == leaveId, cancellationToken);
+
+    public Task AddAsync(DoctorLeave leave, CancellationToken cancellationToken = default) =>
+        _dbContext.DoctorLeaves.AddAsync(leave, cancellationToken).AsTask();
 }

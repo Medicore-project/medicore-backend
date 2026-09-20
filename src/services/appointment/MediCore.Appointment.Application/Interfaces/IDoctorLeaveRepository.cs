@@ -19,4 +19,23 @@ public interface IDoctorLeaveRepository
         DateOnly from,
         DateOnly to,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Every leave request for one doctor whatever its status, most recent first.</summary>
+    Task<IReadOnlyList<DoctorLeave>> GetAllForDoctorAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The approval queue: every request still awaiting a decision, across all doctors, with the
+    /// soonest start date first.
+    /// </summary>
+    Task<IReadOnlyList<DoctorLeave>> GetPendingAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Returns a change-tracked request by its business key, for review or withdrawal.</summary>
+    Task<DoctorLeave?> GetTrackedByLeaveIdAsync(
+        Guid leaveId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Stages a new leave request for insertion (not yet committed).</summary>
+    Task AddAsync(DoctorLeave leave, CancellationToken cancellationToken = default);
 }

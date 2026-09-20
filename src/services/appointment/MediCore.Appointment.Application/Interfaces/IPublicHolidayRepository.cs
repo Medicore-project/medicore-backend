@@ -13,4 +13,21 @@ public interface IPublicHolidayRepository
         DateOnly from,
         DateOnly to,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Every holiday on record, earliest first.</summary>
+    Task<IReadOnlyList<PublicHoliday>> GetAllAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether a holiday is already declared on <paramref name="date"/>. Backs a clear 409 instead
+    /// of letting the partial unique index <c>ux_public_holidays_date</c> surface as a 500.
+    /// </summary>
+    Task<bool> ExistsOnDateAsync(DateOnly date, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns a change-tracked holiday by its business key, for withdrawal.</summary>
+    Task<PublicHoliday?> GetTrackedByHolidayIdAsync(
+        Guid holidayId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Stages a new holiday for insertion (not yet committed).</summary>
+    Task AddAsync(PublicHoliday holiday, CancellationToken cancellationToken = default);
 }

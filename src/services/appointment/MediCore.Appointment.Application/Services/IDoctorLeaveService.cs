@@ -1,0 +1,73 @@
+using MediCore.Appointment.Application.DTOs;
+
+namespace MediCore.Appointment.Application.Services;
+
+// ── Discriminated union results ───────────────────────────────────────────────
+
+public abstract record LeaveCreateResult;
+
+/// <summary>
+/// The request was recorded as pending. No slots changed — that only happens on approval.
+/// </summary>
+public sealed record LeaveCreatedResult(DoctorLeaveResponse Leave) : LeaveCreateResult;
+
+public abstract record LeaveReviewResult;
+public sealed record LeaveReviewedResult(DoctorLeaveReviewResponse Response) : LeaveReviewResult;
+public sealed record LeaveReviewNotFoundResult : LeaveReviewResult;
+
+/// <summary>
+/// The decision is not a legal move from the request's current status — for example approving a
+/// request that is already approved. The controller maps this to 409.
+/// </summary>
+public sealed record LeaveReviewInvalidTransitionResult(string From, string To) : LeaveReviewResult;
+
+public abstract record LeaveWithdrawResult;
+public sealed record LeaveWithdrawnResult(SlotReconciliationSummary Impact) : LeaveWithdrawResult;
+public sealed record LeaveWithdrawNotFoundResult : LeaveWithdrawResult;
+
+// ── Service contract ──────────────────────────────────────────────────────────
+
+/// <summary>
+/// Doctor leave, including the approval workflow.
+/// </summary>
+/// <remarks>
+/// Requesting leave and being granted it are separate acts. Creating a request changes nothing
+/// about the doctor's calendar; only an administrator's approval does, and only then is
+/// reconciliation run.
+/// </remarks>
+public interface IDoctorLeaveService
+{
+    /// <summary>Every leave request for one doctor, whatever its status.</summary>
+    Task<IReadOnlyList<DoctorLeaveResponse>> GetForDoctorAsync(
+        Guid doctorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>The approval queue — every request still awaiting a decision.</summary>
+    Task<IReadOnlyList<DoctorLeaveResponse>> GetPendingAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Submits a request. Always lands as pending, whoever submits it.</summary>
+    Task<LeaveCreateResult> CreateAsync(
+        CreateDoctorLeaveRequest request,
+        string actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records an administrator's approval or rejection, then reconciles the doctor's slots if the
+    /// decision changed whether the leave suppresses them.
+    /// </summary>
+    Task<LeaveReviewResult> ReviewAsync(
+        Guid leaveId,
+        ReviewDoctorLeaveRequest request,
+        string actor,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Withdraws a request. Reconciliation runs only when the request had been approved, since a
+    /// pending or rejected one was never affecting the calendar.
+    /// </summary>
+    Task<LeaveWithdrawResult> WithdrawAsync(
+        Guid leaveId,
+        string actor,
+        CancellationToken cancellationToken = default);
+}
