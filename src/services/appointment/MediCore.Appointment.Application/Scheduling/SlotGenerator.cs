@@ -82,8 +82,13 @@ public sealed class SlotGenerator : ISlotGenerator
             .Select(holiday => holiday.Date)
             .ToHashSet();
 
+        // Only *approved* leave suppresses slots. A pending request must leave the calendar alone,
+        // otherwise a doctor could clear their own diary just by asking and the administrator's
+        // approval would decide nothing.
         var doctorLeave = leaves
-            .Where(leave => !leave.IsDeleted && leave.DoctorId == schedule.DoctorId)
+            .Where(leave => !leave.IsDeleted
+                && leave.DoctorId == schedule.DoctorId
+                && LeaveStatus.SuppressesSlots(leave.Status))
             .ToArray();
 
         // ── Expansion ────────────────────────────────────────────────────────

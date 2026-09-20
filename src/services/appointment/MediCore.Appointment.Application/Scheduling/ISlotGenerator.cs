@@ -22,9 +22,10 @@ public interface ISlotGenerator
     /// the schedule's own lifetime.
     /// </para>
     /// <para>
-    /// Dates falling on a public holiday, or inside a leave period belonging to this schedule's
-    /// doctor, are skipped entirely rather than generated and then removed — AC3 requires that no
-    /// slot exist on such a date.
+    /// Dates falling on a public holiday, or inside an <see cref="LeaveStatus.Approved"/> leave
+    /// period belonging to this schedule's doctor, are skipped entirely rather than generated and
+    /// then removed — AC3 requires that no slot exist on such a date. Pending and rejected leave
+    /// has no effect.
     /// </para>
     /// </remarks>
     /// <param name="schedule">The schedule to expand. Inactive or soft-deleted schedules yield nothing.</param>
@@ -32,8 +33,8 @@ public interface ISlotGenerator
     /// <param name="to">Last candidate date, inclusive.</param>
     /// <param name="holidays">Clinic-wide closures. Soft-deleted entries are ignored.</param>
     /// <param name="leaves">
-    /// Leave periods. Entries for other doctors and soft-deleted entries are ignored, so callers
-    /// may pass an unfiltered set.
+    /// Leave periods. Entries for other doctors, soft-deleted entries, and any request not in
+    /// <see cref="LeaveStatus.Approved"/> are ignored, so callers may pass an unfiltered set.
     /// </param>
     /// <returns>Slots in chronological order; empty when the schedule produces none.</returns>
     IReadOnlyList<Slot> Generate(
