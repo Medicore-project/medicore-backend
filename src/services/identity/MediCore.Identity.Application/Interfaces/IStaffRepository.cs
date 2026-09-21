@@ -5,6 +5,11 @@ namespace MediCore.Identity.Application.Interfaces;
 
 public interface IStaffRepository
 {
+    /// <param name="specialization">
+    /// Exact specialization name, for "who holds this specialization" lookups. Matched whole rather
+    /// than as a substring like <paramref name="searchTerm"/> does, so "Cardiology" does not also
+    /// return "Pediatric Cardiology".
+    /// </param>
     Task<PagedResult<StaffResponse>> GetPagedAsync(
         int page,
         int pageSize,
@@ -12,6 +17,7 @@ public interface IStaffRepository
         Guid? departmentId,
         string? role,
         bool? isActive,
+        string? specialization = null,
         CancellationToken cancellationToken = default);
 
     Task<StaffResponse?> GetByIdAsync(Guid staffId, CancellationToken cancellationToken = default);

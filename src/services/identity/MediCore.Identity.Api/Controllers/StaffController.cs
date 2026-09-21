@@ -37,13 +37,14 @@ public class StaffController : ControllerBase
         [FromQuery] Guid? departmentId = null,
         [FromQuery] string? role = null,
         [FromQuery] bool? isActive = null,
+        [FromQuery] string? specialization = null,
         CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 100) pageSize = 20;
 
         var result = await _staffRepository.GetPagedAsync(
-            page, pageSize, search, departmentId, role, isActive, cancellationToken);
+            page, pageSize, search, departmentId, role, isActive, specialization, cancellationToken);
 
         return Ok(result);
     }

@@ -24,6 +24,7 @@ public class StaffRepository : IStaffRepository
         Guid? departmentId,
         string? role,
         bool? isActive,
+        string? specialization = null,
         CancellationToken cancellationToken = default)
     {
         var query = _context.StaffProfiles
@@ -45,6 +46,14 @@ public class StaffRepository : IStaffRepository
         if (departmentId.HasValue)
         {
             query = query.Where(s => s.DepartmentId == departmentId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(specialization))
+        {
+            // Whole-name match, unlike the substring search above: "Cardiology" must not also pull
+            // in everyone in "Pediatric Cardiology".
+            var specializationFilter = specialization.Trim().ToLower();
+            query = query.Where(s => s.Specialization.ToLower() == specializationFilter);
         }
 
         if (!string.IsNullOrWhiteSpace(role))
