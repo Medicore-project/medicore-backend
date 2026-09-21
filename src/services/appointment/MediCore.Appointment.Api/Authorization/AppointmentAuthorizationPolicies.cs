@@ -19,11 +19,13 @@ public static class AppointmentAuthorizationPolicies
     public const string HolidayManager = "HolidayManager";
 
     /// <summary>
-    /// Submit and withdraw doctor leave requests. Doctors are included so they can request their
-    /// own leave; the "own leave only" ownership check needs a UserId to StaffId mapping and is
-    /// deferred to SCRUM-33 (DoctorCache).
+    /// Submit and withdraw doctor leave requests.
     /// </summary>
     /// <remarks>
+    /// Doctor-only, and not merely by role: <see cref="Api.Controllers.DoctorLeavesController"/>
+    /// additionally checks the caller's <c>staffId</c> claim against the request's
+    /// <c>DoctorId</c>, so a doctor can submit or withdraw only their own leave — Admin and
+    /// Receptionist cannot act on a doctor's behalf, and one doctor cannot touch another's request.
     /// Submitting does not grant leave. A request created under this policy is
     /// <c>Pending</c> and has no effect on slots until someone holding
     /// <see cref="LeaveApprover"/> approves it.
@@ -49,7 +51,7 @@ public static class AppointmentAuthorizationPolicies
                 ScheduleReader,
                 policy => policy.RequireRole("Admin", "Receptionist", "Doctor", "Nurse"))
             .AddPolicy(HolidayManager, policy => policy.RequireRole("Admin"))
-            .AddPolicy(LeaveManager, policy => policy.RequireRole("Admin", "Receptionist", "Doctor"))
+            .AddPolicy(LeaveManager, policy => policy.RequireRole("Doctor"))
             .AddPolicy(LeaveApprover, policy => policy.RequireRole("Admin"));
 
         return services;

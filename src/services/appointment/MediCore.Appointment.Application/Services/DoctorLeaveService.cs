@@ -120,6 +120,7 @@ public sealed class DoctorLeaveService : IDoctorLeaveService
     public async Task<LeaveWithdrawResult> WithdrawAsync(
         Guid leaveId,
         string actor,
+        Guid? actorStaffId,
         CancellationToken cancellationToken = default)
     {
         var leave = await _repository.GetTrackedByLeaveIdAsync(leaveId, cancellationToken);
@@ -127,6 +128,11 @@ public sealed class DoctorLeaveService : IDoctorLeaveService
         if (leave is null)
         {
             return new LeaveWithdrawNotFoundResult();
+        }
+
+        if (actorStaffId is null || actorStaffId != leave.DoctorId)
+        {
+            return new LeaveWithdrawForbiddenResult();
         }
 
         // Withdrawal is a soft delete rather than a fourth status — see DoctorLeave.

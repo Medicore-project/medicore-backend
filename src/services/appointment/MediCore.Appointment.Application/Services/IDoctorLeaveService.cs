@@ -25,6 +25,11 @@ public abstract record LeaveWithdrawResult;
 public sealed record LeaveWithdrawnResult(SlotReconciliationSummary Impact) : LeaveWithdrawResult;
 public sealed record LeaveWithdrawNotFoundResult : LeaveWithdrawResult;
 
+/// <summary>
+/// The caller is not the doctor this request belongs to. The controller maps this to 403.
+/// </summary>
+public sealed record LeaveWithdrawForbiddenResult : LeaveWithdrawResult;
+
 // ── Service contract ──────────────────────────────────────────────────────────
 
 /// <summary>
@@ -77,8 +82,13 @@ public interface IDoctorLeaveService
     /// Withdraws a request. Reconciliation runs only when the request had been approved, since a
     /// pending or rejected one was never affecting the calendar.
     /// </summary>
+    /// <param name="actorStaffId">
+    /// The caller's own Staff/Doctor id. A doctor may withdraw only their own request — a mismatch,
+    /// or a caller with no staff id at all, returns <see cref="LeaveWithdrawForbiddenResult"/>.
+    /// </param>
     Task<LeaveWithdrawResult> WithdrawAsync(
         Guid leaveId,
         string actor,
+        Guid? actorStaffId,
         CancellationToken cancellationToken = default);
 }

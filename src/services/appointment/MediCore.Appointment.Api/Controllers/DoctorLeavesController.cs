@@ -122,6 +122,14 @@ public sealed class DoctorLeavesController : AppointmentControllerBase
             return CreateValidationProblem(validation.Errors, "Leave request validation failed.");
         }
 
+        // A doctor may only request their own leave — the LeaveManager policy grants the role, this
+        // check grants the specific record. No mapping to a DoctorCache is needed: it's a direct
+        // comparison against the id already carried in the caller's own token.
+        if (CurrentStaffId() is not { } staffId || staffId != request.DoctorId)
+        {
+            return ForbiddenProblem("You can only submit a leave request for yourself.");
+        }
+
         var result = await _service.CreateAsync(request, CurrentActor(), cancellationToken);
 
         return result switch
@@ -189,12 +197,13 @@ public sealed class DoctorLeavesController : AppointmentControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Withdraw(Guid leaveId, CancellationToken cancellationToken)
     {
-        var result = await _service.WithdrawAsync(leaveId, CurrentActor(), cancellationToken);
+        var result = await _service.WithdrawAsync(leaveId, CurrentActor(), CurrentStaffId(), cancellationToken);
 
         return result switch
         {
             LeaveWithdrawnResult withdrawn => Ok(withdrawn.Impact),
             LeaveWithdrawNotFoundResult => NotFound(),
+            LeaveWithdrawForbiddenResult => ForbiddenProblem("You can only withdraw your own leave request."),
             _ => throw new InvalidOperationException("Unknown leave withdraw result.")
         };
     }

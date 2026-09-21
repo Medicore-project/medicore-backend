@@ -27,6 +27,15 @@ public abstract class AppointmentControllerBase : ControllerBase
         ?? "system";
 
     /// <summary>
+    /// The caller's own Staff/Doctor id, from the <c>staffId</c> claim the identity service embeds
+    /// for staff accounts — the same id stored as <c>DoctorLeave.DoctorId</c> and friends. Null when
+    /// the caller has no staff profile (or an older token predating the claim); treat that as "this
+    /// caller cannot own anything", never as a wildcard match.
+    /// </summary>
+    protected Guid? CurrentStaffId() =>
+        Guid.TryParse(User.FindFirstValue("staffId"), out var staffId) ? staffId : null;
+
+    /// <summary>
     /// Builds a 400 from FluentValidation failures, keyed by camelCased property name so the
     /// payload matches the JSON the client sent.
     /// </summary>
@@ -53,6 +62,14 @@ public abstract class AppointmentControllerBase : ControllerBase
         {
             Title = title,
             Status = StatusCodes.Status409Conflict
+        });
+
+    /// <summary>Builds a 403 with a human-readable title.</summary>
+    protected IActionResult ForbiddenProblem(string title) =>
+        StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+        {
+            Title = title,
+            Status = StatusCodes.Status403Forbidden
         });
 
     private static string ToCamelCase(string value) =>
