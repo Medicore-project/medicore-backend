@@ -378,7 +378,7 @@ services:
       patient-api:
         condition: service_healthy
       appointment-api:
-        condition: service_healthy
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -396,11 +396,19 @@ services:
       Services__Appointment: http://appointment-api:8080
       Services__Billing:     http://billing-api:8080
 
-      # YARP cluster overrides — point to internal Docker service names
-      ReverseProxy__Clusters__identity-cluster__Destinations__identity-primary__Address:     http://identity-api:8080
-      ReverseProxy__Clusters__patient-cluster__Destinations__patient-primary__Address:       http://patient-api:8080
-      ReverseProxy__Clusters__appointment-cluster__Destinations__appointment-primary__Address: http://appointment-api:8080
-      ReverseProxy__Clusters__billing-cluster__Destinations__billing-primary__Address:       http://billing-api:8080
+      # YARP cluster overrides — point to internal Docker service names.
+      #
+      # These keys MUST match the cluster and destination ids in the gateway's
+      # appsettings.json exactly, which are camelCase. Hyphenated names here do not
+      # override anything: they silently define extra, unused clusters, and traffic
+      # keeps going wherever appsettings.json points. That bit hard for identity,
+      # whose appsettings destination is a (stopped) Azure App Service, so every
+      # /auth/** and /api/staff/** request through the gateway returned
+      # "403 Site Disabled" while the other three services worked by coincidence.
+      ReverseProxy__Clusters__identityCluster__Destinations__identityPrimary__Address:       http://identity-api:8080
+      ReverseProxy__Clusters__patientCluster__Destinations__patientPrimary__Address:         http://patient-api:8080
+      ReverseProxy__Clusters__appointmentCluster__Destinations__appointmentPrimary__Address: http://appointment-api:8080
+      ReverseProxy__Clusters__billingCluster__Destinations__billingPrimary__Address:         http://billing-api:8080
     ports:
       - "${GATEWAY_PORT:-5000}:8080"
     networks:
