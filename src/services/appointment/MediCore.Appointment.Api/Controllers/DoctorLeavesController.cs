@@ -47,6 +47,46 @@ public sealed class DoctorLeavesController : AppointmentControllerBase
     public async Task<IActionResult> GetForDoctor(Guid doctorId, CancellationToken cancellationToken) =>
         Ok(await _service.GetForDoctorAsync(doctorId, cancellationToken));
 
+    // ── GET /api/doctor-leaves/approved ───────────────────────────────────────
+
+    /// <summary>
+    /// Approved leave for a doctor overlapping <c>from</c>..<c>to</c> (Asia/Colombo dates). For a
+    /// booking UI to tell "no slots because the doctor is on leave" apart from "no schedule" or "a
+    /// public holiday" on an otherwise-empty day.
+    /// </summary>
+    [HttpGet("approved")]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.ScheduleReader)]
+    [ProducesResponseType(typeof(IReadOnlyList<DoctorLeaveResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetApproved(
+        [FromQuery] Guid doctorId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        if (doctorId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "A doctorId is required.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        if (from > to)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "The 'from' date must not be after the 'to' date.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(await _service.GetApprovedBetweenAsync(doctorId, from, to, cancellationToken));
+    }
+
     // ── GET /api/doctor-leaves/pending ────────────────────────────────────────
 
     /// <summary>

@@ -42,6 +42,17 @@ public interface IDoctorLeaveService
         Guid doctorId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Approved leave for one doctor overlapping <paramref name="from"/>..<paramref name="to"/> —
+    /// the dates on that doctor's calendar with no slots because leave suppressed them, as opposed
+    /// to no schedule or a public holiday. Meant for a booking UI to explain an empty day.
+    /// </summary>
+    Task<IReadOnlyList<DoctorLeaveResponse>> GetApprovedBetweenAsync(
+        Guid doctorId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default);
+
     /// <summary>The approval queue — every request still awaiting a decision.</summary>
     Task<IReadOnlyList<DoctorLeaveResponse>> GetPendingAsync(
         CancellationToken cancellationToken = default);

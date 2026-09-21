@@ -32,6 +32,16 @@ public sealed class DoctorLeaveService : IDoctorLeaveService
         return leaves.Select(ToResponse).ToList();
     }
 
+    public async Task<IReadOnlyList<DoctorLeaveResponse>> GetApprovedBetweenAsync(
+        Guid doctorId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default)
+    {
+        var leaves = await _repository.GetApprovedForDoctorBetweenAsync(doctorId, from, to, cancellationToken);
+        return leaves.Select(ToResponse).ToList();
+    }
+
     public async Task<IReadOnlyList<DoctorLeaveResponse>> GetPendingAsync(
         CancellationToken cancellationToken = default)
     {
