@@ -40,7 +40,7 @@ public sealed class DoctorLeavesController : AppointmentControllerBase
 
     /// <summary>Every leave request for one doctor, whatever its status.</summary>
     [HttpGet("doctor/{doctorId:guid}")]
-    [Authorize(Policy = AppointmentAuthorizationPolicies.ScheduleReader)]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.LeaveReader)]
     [ProducesResponseType(typeof(IReadOnlyList<DoctorLeaveResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

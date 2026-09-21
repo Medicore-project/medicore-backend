@@ -5,7 +5,16 @@ public static class AppointmentAuthorizationPolicies
     /// <summary>Create, change and delete doctor schedules and slot blocks.</summary>
     public const string ScheduleManager = "ScheduleManager";
 
-    /// <summary>Read schedules, slots, holidays and leave.</summary>
+    /// <summary>
+    /// Read schedules, slots and holidays, plus which dates are covered by <em>approved</em> leave
+    /// — what the booking grid needs to explain an otherwise-empty day.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately does not cover the full leave record — every pending/rejected request, who
+    /// reviewed it, their notes — see <see cref="LeaveReader"/>. Receptionist and Nurse only ever
+    /// need to know a doctor is unavailable and (loosely) why; they have no reason to browse the
+    /// approval history.
+    /// </remarks>
     public const string ScheduleReader = "ScheduleReader";
 
     /// <summary>
@@ -33,6 +42,19 @@ public static class AppointmentAuthorizationPolicies
     public const string LeaveManager = "LeaveManager";
 
     /// <summary>
+    /// Read the full leave record for a doctor — every request whatever its status, reasons,
+    /// review notes.
+    /// </summary>
+    /// <remarks>
+    /// Admin, because it's the approver queue's audit trail, and Doctor, for their own history (the
+    /// UI locks a doctor to their own id; this policy only guarantees the role, not the record —
+    /// see the ownership check on <see cref="LeaveManager"/> for the write side). Deliberately
+    /// excludes Receptionist and Nurse: front-desk staff need to know a doctor is unavailable, which
+    /// <see cref="ScheduleReader"/> already answers, not the approval history behind it.
+    /// </remarks>
+    public const string LeaveReader = "LeaveReader";
+
+    /// <summary>
     /// Approve or reject a pending leave request.
     /// </summary>
     /// <remarks>
@@ -52,6 +74,7 @@ public static class AppointmentAuthorizationPolicies
                 policy => policy.RequireRole("Admin", "Receptionist", "Doctor", "Nurse"))
             .AddPolicy(HolidayManager, policy => policy.RequireRole("Admin"))
             .AddPolicy(LeaveManager, policy => policy.RequireRole("Doctor"))
+            .AddPolicy(LeaveReader, policy => policy.RequireRole("Admin", "Doctor"))
             .AddPolicy(LeaveApprover, policy => policy.RequireRole("Admin"));
 
         return services;
