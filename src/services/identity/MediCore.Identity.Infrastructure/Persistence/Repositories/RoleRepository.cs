@@ -1,6 +1,7 @@
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Entities;
 using MediCore.Identity.Application.Interfaces;
+using MediCore.Identity.Application.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace MediCore.Identity.Infrastructure.Persistence.Repositories;
@@ -65,6 +66,11 @@ public class RoleRepository : IRoleRepository
         }
 
         staff.User.Role = role.Name;
+
+        // A role change decides whether this person is bookable as a doctor elsewhere, so it is
+        // announced like any other profile change, atomically with the change itself.
+        await _context.OutboxMessages.AddAsync(
+            StaffOutboxMessages.Updated(staff, DateTime.UtcNow), cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

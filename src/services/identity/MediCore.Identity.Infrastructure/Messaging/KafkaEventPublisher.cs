@@ -14,6 +14,7 @@ public sealed class KafkaEventPublisher : IKafkaEventPublisher
     }
 
     public async Task PublishAsync(
+        Guid messageId,
         string topic,
         string eventKey,
         string eventType,
@@ -27,7 +28,7 @@ public sealed class KafkaEventPublisher : IKafkaEventPublisher
             Headers =
             [
                 new Header("event-type", Encoding.UTF8.GetBytes(eventType)),
-                new Header("message-id", Encoding.UTF8.GetBytes(eventKey))
+                new Header("message-id", Encoding.UTF8.GetBytes(messageId.ToString()))
             ]
         };
 
