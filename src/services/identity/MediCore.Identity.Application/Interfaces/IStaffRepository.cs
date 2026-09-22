@@ -35,4 +35,10 @@ public interface IStaffRepository
         CancellationToken cancellationToken = default);
 
     Task<bool> DeactivateStaffAsync(Guid staffId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Queues a staff.updated outbox row for every doctor, for consumers backfilling their cache.
+    /// </summary>
+    /// <returns>The number of events queued.</returns>
+    Task<int> QueueDoctorRepublishAsync(CancellationToken cancellationToken = default);
 }

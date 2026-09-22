@@ -77,6 +77,55 @@ public sealed class StaffOutboxMessagesTests
         Assert.Null(evt.IsActive);
     }
 
+    [Fact]
+    public void Republish_queues_only_doctors()
+    {
+        var doctor = Doctor();
+        var nurse = Doctor();
+        nurse.User = new User { Role = "Nurse" };
+        var admin = Doctor();
+        admin.User = new User { Role = "Admin" };
+
+        var messages = StaffOutboxMessages.RepublishDoctors([doctor, nurse, admin], Now);
+
+        var only = Assert.Single(messages);
+        Assert.Equal(doctor.Id.ToString(), only.EventKey);
+        Assert.Equal("staff.updated", only.EventType);
+    }
+
+    [Fact]
+    public void Republish_includes_inactive_doctors_so_consumers_learn_they_are_not_bookable()
+    {
+        var inactive = Doctor();
+        inactive.IsActive = false;
+
+        var messages = StaffOutboxMessages.RepublishDoctors([inactive], Now);
+
+        Assert.False(Deserialize(Assert.Single(messages)).IsActive);
+    }
+
+    [Fact]
+    public void Republish_skips_deleted_staff_and_staff_without_a_loaded_user()
+    {
+        var deleted = Doctor();
+        deleted.IsDeleted = true;
+        var noUser = Doctor();
+        noUser.User = null;
+
+        var messages = StaffOutboxMessages.RepublishDoctors([deleted, noUser], Now);
+
+        Assert.Empty(messages);
+    }
+
+    [Fact]
+    public void Republish_matches_the_role_name_exactly()
+    {
+        var lowercase = Doctor();
+        lowercase.User = new User { Role = "doctor" };
+
+        Assert.Empty(StaffOutboxMessages.RepublishDoctors([lowercase], Now));
+    }
+
     private static StaffUpdatedEvent Deserialize(OutboxMessage message) =>
         JsonSerializer.Deserialize<StaffUpdatedEvent>(message.Payload)!;
 

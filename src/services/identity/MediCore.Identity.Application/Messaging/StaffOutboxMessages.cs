@@ -12,6 +12,20 @@ namespace MediCore.Identity.Application.Messaging;
 public static class StaffOutboxMessages
 {
     public const string Topic = "staff-events";
+    public const string DoctorRole = "Doctor";
+
+    /// <summary>
+    /// One staff.updated per doctor, re-announcing current state so a consumer that joined after
+    /// the original events aged out of Kafka's retention can rebuild its copy. Inactive doctors are
+    /// included on purpose — the consumer needs to hear that they are not bookable. Everyone else
+    /// is skipped.
+    /// </summary>
+    public static IReadOnlyList<OutboxMessage> RepublishDoctors(
+        IEnumerable<StaffProfile> staff, DateTime occurredOnUtc) =>
+        staff
+            .Where(s => !s.IsDeleted && s.User?.Role == DoctorRole)
+            .Select(s => Updated(s, occurredOnUtc))
+            .ToList();
 
     /// <param name="staff">Must have <see cref="StaffProfile.User"/> loaded, or the role is sent as null.</param>
     public static OutboxMessage Updated(StaffProfile staff, DateTime occurredOnUtc)

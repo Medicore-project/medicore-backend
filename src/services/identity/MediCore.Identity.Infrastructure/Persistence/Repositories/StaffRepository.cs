@@ -280,4 +280,22 @@ public class StaffRepository : IStaffRepository
 
         return true;
     }
+
+    public async Task<int> QueueDoctorRepublishAsync(CancellationToken cancellationToken = default)
+    {
+        var doctors = await _context.StaffProfiles
+            .AsNoTracking()
+            .Include(s => s.User)
+            .Where(s => s.User != null && s.User.Role == StaffOutboxMessages.DoctorRole)
+            .ToListAsync(cancellationToken);
+
+        var messages = StaffOutboxMessages.RepublishDoctors(doctors, DateTime.UtcNow);
+        if (messages.Count == 0)
+            return 0;
+
+        await _context.OutboxMessages.AddRangeAsync(messages, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return messages.Count;
+    }
 }
