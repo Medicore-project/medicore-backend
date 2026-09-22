@@ -9,6 +9,7 @@ namespace MediCore.Appointment.Infrastructure.Persistence;
 public sealed class AppointmentUnitOfWork : IUnitOfWork
 {
     private const string SlotDoctorStartConstraintName = "ux_slots_doctor_start";
+    private const string ProcessedMessagePrimaryKeyName = "pk_processed_messages";
 
     private readonly AppointmentDbContext _dbContext;
 
@@ -34,6 +35,17 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
             // scoped context would retry them and fail again.
             _dbContext.ChangeTracker.Clear();
             throw new DuplicateSlotException(exception);
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: ProcessedMessagePrimaryKeyName
+            })
+        {
+            // Another consumer attempt committed this message first; its effect is already saved.
+            _dbContext.ChangeTracker.Clear();
+            throw new DuplicateProcessedMessageException(exception);
         }
     }
 }

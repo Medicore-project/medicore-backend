@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<ISlotRepository, SlotRepository>();
         services.AddScoped<IPublicHolidayRepository, PublicHolidayRepository>();
         services.AddScoped<IDoctorLeaveRepository, DoctorLeaveRepository>();
+        services.AddScoped<IDoctorCacheRepository, DoctorCacheRepository>();
+        services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
         services.AddScoped<IUnitOfWork, AppointmentUnitOfWork>();
 
         // The Kafka outbox processor is wired up when event publishing lands (SCRUM-34).
