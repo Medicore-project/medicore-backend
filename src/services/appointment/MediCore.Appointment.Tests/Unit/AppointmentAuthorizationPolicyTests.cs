@@ -136,6 +136,27 @@ public sealed class AppointmentAuthorizationPolicyTests
         Assert.Equal(AppointmentAuthorizationPolicies.LeaveApprover, attribute.Policy);
     }
 
+    [Theory]
+    [InlineData(nameof(DoctorsController.List))]
+    [InlineData(nameof(DoctorsController.GetById))]
+    public void Doctor_directory_endpoints_require_the_schedule_reader_policy(string methodName)
+    {
+        // Same audience as the booking grid: every clinic role picks doctors when booking.
+        var attribute = Assert.Single(GetAuthorizeAttributes<DoctorsController>(methodName));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.ScheduleReader, attribute.Policy);
+    }
+
+    [Fact]
+    public void The_doctor_directory_is_not_anonymous()
+    {
+        // The gateway does not authenticate, so a missing [Authorize] would publish the staff list.
+        Assert.NotNull(typeof(DoctorsController).GetCustomAttribute<AuthorizeAttribute>());
+        Assert.Empty(typeof(DoctorsController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttribute<AllowAnonymousAttribute>() is not null));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static IReadOnlyList<AuthorizeAttribute> GetAuthorizeAttributes<TController>(string methodName) =>

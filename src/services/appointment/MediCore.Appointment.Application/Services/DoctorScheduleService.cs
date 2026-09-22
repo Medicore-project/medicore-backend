@@ -9,17 +9,20 @@ namespace MediCore.Appointment.Application.Services;
 public sealed class DoctorScheduleService : IDoctorScheduleService
 {
     private readonly IDoctorScheduleRepository _repository;
+    private readonly IDoctorCacheRepository _doctorRepository;
     private readonly IScheduleOverlapDetector _overlapDetector;
     private readonly IScheduleRevisionService _revisionService;
     private readonly IUnitOfWork _unitOfWork;
 
     public DoctorScheduleService(
         IDoctorScheduleRepository repository,
+        IDoctorCacheRepository doctorRepository,
         IScheduleOverlapDetector overlapDetector,
         IScheduleRevisionService revisionService,
         IUnitOfWork unitOfWork)
     {
         _repository = repository;
+        _doctorRepository = doctorRepository;
         _overlapDetector = overlapDetector;
         _revisionService = revisionService;
         _unitOfWork = unitOfWork;
@@ -46,6 +49,13 @@ public sealed class DoctorScheduleService : IDoctorScheduleService
         string actor,
         CancellationToken cancellationToken = default)
     {
+        // Checked against the local cache, never Identity, so scheduling works while Identity is
+        // down. There is no FK to the cache either, which is why the check lives here.
+        if (await _doctorRepository.GetActiveAsync(request.DoctorId, cancellationToken) is null)
+        {
+            return new ScheduleCreateDoctorNotFoundResult();
+        }
+
         var schedule = new DoctorSchedule
         {
             DoctorId = request.DoctorId,
