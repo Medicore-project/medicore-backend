@@ -16,7 +16,7 @@ public sealed class DoctorLeaveConfiguration : IEntityTypeConfiguration<DoctorLe
 
         builder.Property(l => l.LeaveId).IsRequired();
 
-        // No FK on DoctorId — DoctorCache arrives in SCRUM-33.
+        // No FK on DoctorId — DoctorCache is eventually consistent; see DoctorLeave.DoctorId.
         builder.Property(l => l.DoctorId).IsRequired();
 
         builder.Property(l => l.StartDate).HasColumnType("date").IsRequired();
