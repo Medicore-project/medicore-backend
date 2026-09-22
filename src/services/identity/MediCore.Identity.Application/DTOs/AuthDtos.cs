@@ -12,7 +12,8 @@ public record UserDto(
     Guid Id,
     string Email,
     string Role,
-    string Name
+    string Name,
+    Guid? StaffId
 );
 
 public record RefreshTokenRequest(string RefreshToken);

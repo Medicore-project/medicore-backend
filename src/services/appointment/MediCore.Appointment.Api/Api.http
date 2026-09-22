@@ -1,0 +1,14 @@
+@AppointmentApi = http://localhost:5003
+
+### Liveness — no database dependency
+GET {{AppointmentApi}}/health/live
+
+###
+
+### Full health — includes the PostgreSQL check
+GET {{AppointmentApi}}/health
+
+###
+
+### Prometheus scrape target
+GET {{AppointmentApi}}/metrics

@@ -28,6 +28,15 @@ public class JwtTokenGenerator : IJwtTokenGenerator
             new Claim(ClaimTypes.Role, user.Role)
         };
 
+        // StaffProfile.Id, not User.Id — this is the id every other service knows the staff member
+        // by (DoctorLeave.DoctorId, DoctorSchedule.DoctorId, Slot.DoctorId, ...). Absent for a user
+        // with no staff profile, so downstream "is this my own record" checks must treat a missing
+        // claim as "cannot own anything", not as a wildcard.
+        if (user.StaffProfile is not null)
+        {
+            claims.Add(new Claim("staffId", user.StaffProfile.Id.ToString()));
+        }
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
