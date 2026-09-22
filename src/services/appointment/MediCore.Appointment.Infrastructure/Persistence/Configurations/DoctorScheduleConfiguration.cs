@@ -18,7 +18,7 @@ public sealed class DoctorScheduleConfiguration : IEntityTypeConfiguration<Docto
         // ── Business key ─────────────────────────────────────────────────────
         builder.Property(s => s.ScheduleId).IsRequired();
 
-        // ── Doctor linkage (no FK — DoctorCache arrives in SCRUM-33) ─────────
+        // ── Doctor linkage (no FK — DoctorCache is eventually consistent) ────
         builder.Property(s => s.DoctorId).IsRequired();
 
         // ── Working window ───────────────────────────────────────────────────

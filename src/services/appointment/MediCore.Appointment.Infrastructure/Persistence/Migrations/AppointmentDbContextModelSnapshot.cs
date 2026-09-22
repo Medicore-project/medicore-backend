@@ -23,6 +23,67 @@ namespace MediCore.Appointment.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MediCore.Appointment.Application.Entities.DoctorCache", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DoctorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("LastEventOccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Specialization")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DoctorId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_cached_doctors_doctor_id")
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.HasIndex("IsActive", "Specialization")
+                        .HasDatabaseName("ix_cached_doctors_active_specialization");
+
+                    b.ToTable("cached_doctors", "medicore_appointment");
+                });
+
             modelBuilder.Entity("MediCore.Appointment.Application.Entities.DoctorLeave", b =>
                 {
                     b.Property<Guid>("Id")
@@ -220,6 +281,44 @@ namespace MediCore.Appointment.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProcessedOnUtc", "OccurredOnUtc");
 
                     b.ToTable("outbox_messages", "medicore_appointment");
+                });
+
+            modelBuilder.Entity("MediCore.Appointment.Application.Entities.ProcessedMessage", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConsumerGroup")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceTopic")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("MessageId")
+                        .HasName("pk_processed_messages");
+
+                    b.HasIndex("ConsumerGroup", "ProcessedAtUtc")
+                        .HasDatabaseName("ix_processed_messages_consumer_processed_at");
+
+                    b.ToTable("processed_messages", "medicore_appointment");
                 });
 
             modelBuilder.Entity("MediCore.Appointment.Application.Entities.PublicHoliday", b =>

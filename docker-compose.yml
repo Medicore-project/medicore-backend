@@ -345,6 +345,10 @@ services:
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}
       Seq__ServerUrl: http://seq:5341
       Kafka__BootstrapServers: kafka:9092
+      # Doctor cache feed (SCRUM-33). The consumer group is created on first subscribe.
+      Kafka__StaffConsumer__Topic: staff-events
+      Kafka__StaffConsumer__GroupId: medicore-appointment
+      Kafka__StaffConsumer__RetryDelaySeconds: "2"
       # How far ahead slots are generated. See SchedulingOptions.
       Scheduling__SlotHorizonDays: ${SLOT_HORIZON_DAYS:-60}
     networks:

@@ -38,12 +38,14 @@ public sealed class SlotsController : AppointmentControllerBase
     /// <remarks>
     /// Returns only free, future slots. This endpoint is the seam the public guest-booking flow
     /// (SCRUM-39) is expected to reuse, so it deliberately exposes nothing a patient could not
-    /// legitimately book.
+    /// legitimately book — a doctor who is unknown or no longer bookable gets 404, not their
+    /// leftover slots.
     /// </remarks>
     [HttpGet("available")]
     [Authorize(Policy = AppointmentAuthorizationPolicies.ScheduleReader)]
     [ProducesResponseType(typeof(IReadOnlyList<SlotResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetAvailable(
@@ -70,7 +72,14 @@ public sealed class SlotsController : AppointmentControllerBase
             });
         }
 
-        return Ok(await _service.GetAvailableAsync(doctorId, from, to, cancellationToken));
+        var result = await _service.GetAvailableAsync(doctorId, from, to, cancellationToken);
+
+        return result switch
+        {
+            AvailableSlotsFoundResult found => Ok(found.Slots),
+            AvailableSlotsDoctorNotFoundResult => DoctorNotFoundProblem(),
+            _ => throw new InvalidOperationException("Unknown available slots result.")
+        };
     }
 
     // ── GET /api/slots/flagged ────────────────────────────────────────────────

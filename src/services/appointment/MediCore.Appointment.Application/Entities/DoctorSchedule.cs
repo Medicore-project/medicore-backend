@@ -20,7 +20,8 @@ public sealed class DoctorSchedule : IAuditableEntity
 
     /// <summary>
     /// The doctor this schedule belongs to — the <c>StaffId</c> from the Identity service.
-    /// Deliberately stored without a foreign key: the DoctorCache table arrives in SCRUM-33.
+    /// Deliberately no foreign key to <see cref="DoctorCache"/>: that cache is eventually consistent,
+    /// and a hard link would make writes here depend on a staff event having been consumed first.
     /// </summary>
     public Guid DoctorId { get; set; }
 

@@ -19,7 +19,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 
 USER root
-RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+# apt over HTTPS: some networks intercept plain-HTTP apt traffic and answer 403.
+RUN sed -i "s|http://deb.debian.org|https://deb.debian.org|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 USER app
 
 COPY --from=publish /app/publish .

@@ -4,6 +4,15 @@ namespace MediCore.Appointment.Application.Services;
 
 // ── Discriminated union results ───────────────────────────────────────────────
 
+public abstract record AvailableSlotsResult;
+public sealed record AvailableSlotsFoundResult(IReadOnlyList<SlotResponse> Slots) : AvailableSlotsResult;
+
+/// <summary>
+/// The doctor is not in the doctor cache, or is there but no longer bookable (SCRUM-33 AC2). The
+/// controller maps this to 404. Their existing slot rows are left alone.
+/// </summary>
+public sealed record AvailableSlotsDoctorNotFoundResult : AvailableSlotsResult;
+
 public abstract record SlotBlockResult;
 public sealed record SlotBlockedResult(SlotResponse Slot) : SlotBlockResult;
 public sealed record SlotBlockNotFoundResult : SlotBlockResult;
@@ -29,9 +38,10 @@ public interface ISlotService
     /// </summary>
     /// <remarks>
     /// This is the read the public guest-booking flow (SCRUM-39) is intended to reuse, so it
-    /// returns nothing a caller could not legitimately book: free slots only, future only.
+    /// returns nothing a caller could not legitimately book: free slots only, future only, and none
+    /// at all for a doctor who is not bookable.
     /// </remarks>
-    Task<IReadOnlyList<SlotResponse>> GetAvailableAsync(
+    Task<AvailableSlotsResult> GetAvailableAsync(
         Guid doctorId,
         DateOnly? from,
         DateOnly? to,

@@ -15,6 +15,12 @@ public sealed record ScheduleCreatedResult(DoctorScheduleMutationResponse Respon
 public sealed record ScheduleCreateOverlapResult(Guid ConflictingScheduleId, DayOfWeek DayOfWeek)
     : ScheduleCreateResult;
 
+/// <summary>
+/// The doctor is not in the doctor cache, or is there but no longer bookable (SCRUM-33). The
+/// controller maps this to 404.
+/// </summary>
+public sealed record ScheduleCreateDoctorNotFoundResult : ScheduleCreateResult;
+
 public abstract record ScheduleUpdateResult;
 public sealed record ScheduleUpdatedResult(DoctorScheduleMutationResponse Response) : ScheduleUpdateResult;
 public sealed record ScheduleUpdateNotFoundResult : ScheduleUpdateResult;

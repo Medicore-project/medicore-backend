@@ -8,17 +8,20 @@ namespace MediCore.Appointment.Application.Services;
 public sealed class DoctorLeaveService : IDoctorLeaveService
 {
     private readonly IDoctorLeaveRepository _repository;
+    private readonly IDoctorCacheRepository _doctorRepository;
     private readonly IScheduleRevisionService _revisionService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
 
     public DoctorLeaveService(
         IDoctorLeaveRepository repository,
+        IDoctorCacheRepository doctorRepository,
         IScheduleRevisionService revisionService,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider)
     {
         _repository = repository;
+        _doctorRepository = doctorRepository;
         _revisionService = revisionService;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
@@ -54,6 +57,13 @@ public sealed class DoctorLeaveService : IDoctorLeaveService
         string actor,
         CancellationToken cancellationToken = default)
     {
+        // The controller has already proved the caller is this doctor; this proves the doctor is
+        // bookable, from the local cache rather than Identity.
+        if (await _doctorRepository.GetActiveAsync(request.DoctorId, cancellationToken) is null)
+        {
+            return new LeaveCreateDoctorNotFoundResult();
+        }
+
         var leave = new DoctorLeave
         {
             DoctorId = request.DoctorId,

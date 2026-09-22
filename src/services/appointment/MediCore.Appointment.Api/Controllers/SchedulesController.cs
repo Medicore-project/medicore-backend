@@ -63,12 +63,14 @@ public sealed class SchedulesController : AppointmentControllerBase
 
     /// <summary>
     /// Creates a schedule and generates its slots across the horizon.
-    /// Returns 409 when it would overlap an existing schedule for the same doctor and weekday.
+    /// Returns 404 when the doctor is unknown or not bookable, and 409 when it would overlap an
+    /// existing schedule for the same doctor and weekday.
     /// </summary>
     [HttpPost]
     [Authorize(Policy = AppointmentAuthorizationPolicies.ScheduleManager)]
     [ProducesResponseType(typeof(DoctorScheduleMutationResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -92,6 +94,7 @@ public sealed class SchedulesController : AppointmentControllerBase
                 created.Response),
             ScheduleCreateOverlapResult overlap => ConflictProblem(
                 $"This schedule overlaps an existing {overlap.DayOfWeek} schedule for the same doctor."),
+            ScheduleCreateDoctorNotFoundResult => DoctorNotFoundProblem(),
             _ => throw new InvalidOperationException("Unknown schedule creation result.")
         };
     }

@@ -18,6 +18,8 @@ public sealed class AppointmentDbContext : DbContext
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<DoctorLeave> DoctorLeaves => Set<DoctorLeave>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<DoctorCache> DoctorCaches => Set<DoctorCache>();
+    public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

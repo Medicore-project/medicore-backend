@@ -9,28 +9,38 @@ namespace MediCore.Appointment.Application.Services;
 public sealed class SlotService : ISlotService
 {
     private readonly ISlotRepository _repository;
+    private readonly IDoctorCacheRepository _doctorRepository;
     private readonly ISlotGenerator _slotGenerator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
 
     public SlotService(
         ISlotRepository repository,
+        IDoctorCacheRepository doctorRepository,
         ISlotGenerator slotGenerator,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider)
     {
         _repository = repository;
+        _doctorRepository = doctorRepository;
         _slotGenerator = slotGenerator;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
     }
 
-    public async Task<IReadOnlyList<SlotResponse>> GetAvailableAsync(
+    public async Task<AvailableSlotsResult> GetAvailableAsync(
         Guid doctorId,
         DateOnly? from,
         DateOnly? to,
         CancellationToken cancellationToken = default)
     {
+        // A deactivated doctor keeps their slot rows, so without this check their free slots would
+        // still be offered for booking.
+        if (await _doctorRepository.GetActiveAsync(doctorId, cancellationToken) is null)
+        {
+            return new AvailableSlotsDoctorNotFoundResult();
+        }
+
         // An omitted range means "as far ahead as slots exist", which is the horizon.
         var (defaultFrom, defaultTo) = _slotGenerator.CurrentHorizon();
 
@@ -41,7 +51,7 @@ public sealed class SlotService : ISlotService
             _timeProvider.GetUtcNow().UtcDateTime,
             cancellationToken);
 
-        return slots.Select(ToResponse).ToList();
+        return new AvailableSlotsFoundResult(slots.Select(ToResponse).ToList());
     }
 
     public async Task<IReadOnlyList<SlotResponse>> GetFlaggedAsync(

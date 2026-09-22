@@ -31,7 +31,7 @@ public sealed class SlotConfiguration : IEntityTypeConfiguration<Slot>
         // ── Business key ─────────────────────────────────────────────────────
         builder.Property(s => s.SlotId).IsRequired();
 
-        // ── Doctor linkage (no FK — DoctorCache arrives in SCRUM-33) ─────────
+        // ── Doctor linkage (no FK — DoctorCache is eventually consistent) ────
         builder.Property(s => s.DoctorId).IsRequired();
 
         // ── Time window ──────────────────────────────────────────────────────

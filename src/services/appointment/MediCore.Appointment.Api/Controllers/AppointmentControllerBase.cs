@@ -64,6 +64,17 @@ public abstract class AppointmentControllerBase : ControllerBase
             Status = StatusCodes.Status409Conflict
         });
 
+    /// <summary>
+    /// Builds the 404 for a doctor the local doctor cache does not hold as bookable — unknown,
+    /// deactivated, no longer a doctor, or not yet backfilled.
+    /// </summary>
+    protected IActionResult DoctorNotFoundProblem() =>
+        NotFound(new ProblemDetails
+        {
+            Title = "Doctor not found or not bookable.",
+            Status = StatusCodes.Status404NotFound
+        });
+
     /// <summary>Builds a 403 with a human-readable title.</summary>
     protected IActionResult ForbiddenProblem(string title) =>
         StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails

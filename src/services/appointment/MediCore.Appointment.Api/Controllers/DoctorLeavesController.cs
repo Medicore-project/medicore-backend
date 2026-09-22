@@ -104,12 +104,13 @@ public sealed class DoctorLeavesController : AppointmentControllerBase
 
     /// <summary>
     /// Submits a leave request. It is recorded as pending and has no effect on the doctor's slots
-    /// until an administrator approves it.
+    /// until an administrator approves it. Returns 404 when the doctor is not bookable.
     /// </summary>
     [HttpPost]
     [Authorize(Policy = AppointmentAuthorizationPolicies.LeaveManager)]
     [ProducesResponseType(typeof(DoctorLeaveResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Create(
@@ -138,6 +139,7 @@ public sealed class DoctorLeavesController : AppointmentControllerBase
                 nameof(GetForDoctor),
                 new { doctorId = created.Leave.DoctorId },
                 created.Leave),
+            LeaveCreateDoctorNotFoundResult => DoctorNotFoundProblem(),
             _ => throw new InvalidOperationException("Unknown leave creation result.")
         };
     }

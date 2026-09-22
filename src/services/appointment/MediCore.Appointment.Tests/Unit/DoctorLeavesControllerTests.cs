@@ -31,6 +31,18 @@ public sealed class DoctorLeavesControllerTests
     }
 
     [Fact]
+    public async Task A_doctor_not_bookable_in_the_cache_gets_404_for_their_own_leave()
+    {
+        var service = new StubDoctorLeaveService { CreateResult = new LeaveCreateDoctorNotFoundResult() };
+        var controller = CreateController(service, DoctorStaffId);
+
+        var result = await controller.Create(Request(DoctorStaffId), CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal("Doctor not found or not bookable.", Assert.IsType<ProblemDetails>(notFound.Value).Title);
+    }
+
+    [Fact]
     public async Task A_doctor_cannot_submit_leave_for_another_doctor()
     {
         var service = new StubDoctorLeaveService();
@@ -244,6 +256,7 @@ public sealed class DoctorLeavesControllerTests
     {
         public IReadOnlyList<DoctorLeaveResponse> Approved { get; set; } = [];
         public LeaveWithdrawResult WithdrawResult { get; set; } = new LeaveWithdrawNotFoundResult();
+        public LeaveCreateResult? CreateResult { get; set; }
         public int CreateCalls { get; private set; }
         public int ApprovedCalls { get; private set; }
         public Guid? WithdrawStaffId { get; private set; }
@@ -273,8 +286,8 @@ public sealed class DoctorLeavesControllerTests
             CancellationToken cancellationToken = default)
         {
             CreateCalls++;
-            return Task.FromResult<LeaveCreateResult>(
-                new LeaveCreatedResult(Response(LeaveStatus.Pending)));
+            return Task.FromResult(
+                CreateResult ?? new LeaveCreatedResult(Response(LeaveStatus.Pending)));
         }
 
         public Task<LeaveReviewResult> ReviewAsync(

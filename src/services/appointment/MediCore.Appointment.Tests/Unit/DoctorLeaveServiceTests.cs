@@ -147,7 +147,52 @@ public sealed class DoctorLeaveServiceTests
         Assert.Empty(fixture.Revisions.Reconciled);
     }
 
+    // ── Submitting leave against the doctor cache (SCRUM-33) ──────────────────
+
+    [Fact]
+    public async Task A_bookable_doctor_submits_a_pending_request()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.CreateAsync(CreateRequest(DoctorId), "doctor@medicore.lk");
+
+        var created = Assert.IsType<LeaveCreatedResult>(result);
+        Assert.Equal(LeaveStatus.Pending, created.Leave.Status);
+        Assert.Single(fixture.Leaves.Added);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Leave_for_a_doctor_missing_from_the_cache_is_refused_and_nothing_is_saved()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.CreateAsync(CreateRequest(OtherDoctorId), "other@medicore.lk");
+
+        Assert.IsType<LeaveCreateDoctorNotFoundResult>(result);
+        Assert.Empty(fixture.Leaves.Added);
+        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Leave_for_a_deactivated_doctor_is_refused()
+    {
+        var fixture = new Fixture();
+        fixture.Doctors.Doctors[0].IsActive = false;
+
+        var result = await fixture.Service.CreateAsync(CreateRequest(DoctorId), "doctor@medicore.lk");
+
+        Assert.IsType<LeaveCreateDoctorNotFoundResult>(result);
+        Assert.Empty(fixture.Leaves.Added);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static CreateDoctorLeaveRequest CreateRequest(Guid doctorId) => new(
+        doctorId,
+        new DateOnly(2026, 9, 28),
+        new DateOnly(2026, 9, 30),
+        "Conference");
 
     private static DoctorLeave Leave(string status, string? reason = null) => new()
     {
@@ -165,22 +210,54 @@ public sealed class DoctorLeaveServiceTests
         public Fixture(DoctorLeave? leave = null)
         {
             Leaves = new FakeDoctorLeaveRepository(leave);
+
+            // DoctorId is cached and bookable; OtherDoctorId is not in the cache at all.
+            Doctors = new FakeDoctorCacheRepository(
+                new DoctorCache { DoctorId = DoctorId, FullName = "Nimal Perera", IsActive = true });
             Revisions = new FakeScheduleRevisionService();
             UnitOfWork = new FakeUnitOfWork();
             Service = new DoctorLeaveService(
                 Leaves,
+                Doctors,
                 Revisions,
                 UnitOfWork,
                 new FixedTimeProvider(Now));
         }
 
         public FakeDoctorLeaveRepository Leaves { get; }
+        public FakeDoctorCacheRepository Doctors { get; }
         public FakeScheduleRevisionService Revisions { get; }
         public FakeUnitOfWork UnitOfWork { get; }
         public DoctorLeaveService Service { get; }
     }
 
     private sealed record ApprovedQuery(Guid DoctorId, DateOnly From, DateOnly To);
+
+    private sealed class FakeDoctorCacheRepository : IDoctorCacheRepository
+    {
+        public FakeDoctorCacheRepository(params DoctorCache[] doctors)
+        {
+            Doctors = [.. doctors];
+        }
+
+        public List<DoctorCache> Doctors { get; }
+
+        public Task<DoctorCache?> GetActiveAsync(Guid doctorId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Doctors.FirstOrDefault(doctor => doctor.DoctorId == doctorId && doctor.IsActive));
+
+        public Task<DoctorCache?> GetTrackedByDoctorIdAsync(
+            Guid doctorId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Leave never writes to the doctor cache.");
+
+        public Task<IReadOnlyList<DoctorCache>> ListActiveAsync(
+            string? specialization,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Leave never lists doctors.");
+
+        public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Leave never writes to the doctor cache.");
+    }
 
     private sealed class FakeDoctorLeaveRepository : IDoctorLeaveRepository
     {

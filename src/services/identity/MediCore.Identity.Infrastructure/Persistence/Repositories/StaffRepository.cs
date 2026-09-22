@@ -3,6 +3,7 @@ using MediCore.Contracts.Events.Staff;
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Entities;
 using MediCore.Identity.Application.Interfaces;
+using MediCore.Identity.Application.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace MediCore.Identity.Infrastructure.Persistence.Repositories;
@@ -220,22 +221,7 @@ public class StaffRepository : IStaffRepository
             staff.User.IsActive = request.IsActive;
         }
 
-        var updatedEvent = new StaffUpdatedEvent
-        {
-            StaffId = staff.Id,
-            FullName = staff.FullName,
-            Specialization = staff.Specialization,
-            DepartmentId = staff.DepartmentId
-        };
-
-        var outboxMessage = new OutboxMessage
-        {
-            Topic = StaffEventsTopic,
-            EventKey = staff.Id.ToString(),
-            EventType = updatedEvent.EventType,
-            Payload = JsonSerializer.Serialize(updatedEvent),
-            OccurredOnUtc = DateTime.UtcNow
-        };
+        var outboxMessage = StaffOutboxMessages.Updated(staff, DateTime.UtcNow);
 
         await _context.OutboxMessages.AddAsync(outboxMessage, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
@@ -293,5 +279,23 @@ public class StaffRepository : IStaffRepository
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    public async Task<int> QueueDoctorRepublishAsync(CancellationToken cancellationToken = default)
+    {
+        var doctors = await _context.StaffProfiles
+            .AsNoTracking()
+            .Include(s => s.User)
+            .Where(s => s.User != null && s.User.Role == StaffOutboxMessages.DoctorRole)
+            .ToListAsync(cancellationToken);
+
+        var messages = StaffOutboxMessages.RepublishDoctors(doctors, DateTime.UtcNow);
+        if (messages.Count == 0)
+            return 0;
+
+        await _context.OutboxMessages.AddRangeAsync(messages, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return messages.Count;
     }
 }

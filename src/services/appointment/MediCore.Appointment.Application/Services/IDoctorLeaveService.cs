@@ -11,6 +11,12 @@ public abstract record LeaveCreateResult;
 /// </summary>
 public sealed record LeaveCreatedResult(DoctorLeaveResponse Leave) : LeaveCreateResult;
 
+/// <summary>
+/// The doctor is not in the doctor cache, or is there but no longer bookable (SCRUM-33). The
+/// controller maps this to 404.
+/// </summary>
+public sealed record LeaveCreateDoctorNotFoundResult : LeaveCreateResult;
+
 public abstract record LeaveReviewResult;
 public sealed record LeaveReviewedResult(DoctorLeaveReviewResponse Response) : LeaveReviewResult;
 public sealed record LeaveReviewNotFoundResult : LeaveReviewResult;

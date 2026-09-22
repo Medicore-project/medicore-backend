@@ -120,6 +120,27 @@ public class StaffController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Re-announces every doctor on staff-events so downstream caches can backfill.
+    /// </summary>
+    /// <remarks>
+    /// Kafka keeps staff-events for 7 days, so a consumer that starts later never sees the original
+    /// events for doctors created before then. Run once after such a consumer is first deployed.
+    /// Safe to repeat: each event carries full current state, so replays converge on the same result.
+    /// Events are published asynchronously through the outbox, hence 202 rather than 200.
+    /// </remarks>
+    [HttpPost("doctors/republish")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(typeof(RepublishDoctorsResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RepublishDoctors(CancellationToken cancellationToken)
+    {
+        var queued = await _staffRepository.QueueDoctorRepublishAsync(cancellationToken);
+
+        return Accepted(new RepublishDoctorsResponse(queued));
+    }
+
     [HttpPost("{id:guid}/roles")]
     [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> AssignRole(
