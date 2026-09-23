@@ -20,6 +20,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.*" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
     <PackageReference Include="QuestPDF" Version="2026.8.0" />
+    <!-- Mints the public booking token. Pinned to the version
+         Microsoft.AspNetCore.Authentication.JwtBearer 8.0.11 already brings into the Api
+         project, so the two assemblies cannot end up on different versions. -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.1.2" />
   </ItemGroup>
 
   <ItemGroup>
