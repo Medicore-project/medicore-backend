@@ -1,5 +1,6 @@
 using System.Text;
 using MediCore.Appointment.Api.Authorization;
+using MediCore.Appointment.Api.Controllers;
 using MediCore.Appointment.Api.Middleware;
 using MediCore.Appointment.Application;
 using MediCore.Appointment.Infrastructure;
@@ -71,6 +72,16 @@ builder.Services.AddRateLimiter(options =>
         limiter.QueueLimit = 0;
         limiter.AutoReplenishment = true;
     });
+    // The anonymous booking reads carry this in addition to the policy above, so they are limited
+    // by both. See PublicRateLimitPolicies for why it is not partitioned by IP.
+    options.AddFixedWindowLimiter(PublicRateLimitPolicies.PublicBooking, limiter =>
+    {
+        limiter.PermitLimit = PublicRateLimitPolicies.PermitLimit;
+        limiter.Window = PublicRateLimitPolicies.Window;
+        limiter.QueueLimit = 0;
+        limiter.AutoReplenishment = true;
+    });
+
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 

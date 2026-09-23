@@ -44,6 +44,47 @@ public sealed class AppointmentApiFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
+    /// A client carrying a booking token for one patient — the thing the Patient service mints
+    /// when someone identifies themselves on the public booking page.
+    /// </summary>
+    /// <remarks>
+    /// Built here rather than by calling the Patient service, because this host cannot reach it.
+    /// The shape is what matters and is asserted on the Patient side: a <c>patientId</c> claim and
+    /// <strong>no role claim at all</strong>, signed with the key every service shares.
+    /// </remarks>
+    public HttpClient CreateBookingClientFor(Guid patientId)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", CreateBookingToken(patientId));
+        return client;
+    }
+
+    private string CreateBookingToken(Guid patientId)
+    {
+        var configuration = Services.GetRequiredService<IConfiguration>();
+        var key = configuration["Jwt:Key"]
+            ?? throw new InvalidOperationException("Jwt:Key is not configured for the test host.");
+
+        var token = new JwtSecurityToken(
+            issuer: configuration["Jwt:Issuer"] ?? "medicore-identity",
+            audience: configuration["Jwt:Audience"] ?? "medicore-clients",
+            claims:
+            [
+                new Claim(JwtRegisteredClaimNames.Sub, patientId.ToString()),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim("patientId", patientId.ToString()),
+                new Claim("token_use", "booking")
+            ],
+            expires: DateTime.UtcNow.AddMinutes(10),
+            signingCredentials: new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                SecurityAlgorithms.HmacSha256));
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
     /// A token shaped like the ones Identity issues (see Identity's <c>JwtTokenGenerator</c>),
     /// signed with the settings this host loaded.
     /// </summary>
