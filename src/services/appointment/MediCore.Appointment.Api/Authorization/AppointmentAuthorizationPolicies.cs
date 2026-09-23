@@ -88,6 +88,15 @@ public static class AppointmentAuthorizationPolicies
     /// </summary>
     public const string PatientIdClaim = "patientId";
 
+    /// <summary>
+    /// The patient's number and name on a booking token. Descriptive only — no policy reads them;
+    /// they are copied onto the appointment so staff can see who booked.
+    /// </summary>
+    public const string PatientNumberClaim = "patientNumber";
+
+    /// <inheritdoc cref="PatientNumberClaim"/>
+    public const string PatientNameClaim = "patientName";
+
     public static IServiceCollection AddAppointmentAuthorization(this IServiceCollection services)
     {
         services.AddAuthorizationBuilder()

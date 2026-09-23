@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MediCore.Appointment.Application.DTOs;
 using MediCore.Appointment.Application.Entities;
 using MediCore.Appointment.Application.Exceptions;
 using MediCore.Appointment.Application.Interfaces;
@@ -44,6 +45,42 @@ public sealed class AppointmentBookingServiceTests
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);
         Assert.Equal("desk@medicore.test", appointment.CreatedBy);
         Assert.Equal(appointment.AppointmentId, created.Appointment.AppointmentId);
+    }
+
+    [Fact]
+    public async Task The_booking_records_who_it_is_for_so_staff_can_see_it()
+    {
+        var fixture = new Fixture(FreeSlot());
+
+        var result = await fixture.Service.BookAsync(
+            SlotId,
+            PatientId,
+            serviceCode: null,
+            "desk",
+            "corr-1",
+            new BookingPatientDetails("PAT-000123", "Nimal Perera"));
+
+        var appointment = Assert.Single(fixture.Appointments.Added);
+        Assert.Equal("PAT-000123", appointment.PatientNumber);
+        Assert.Equal("Nimal Perera", appointment.PatientName);
+
+        var created = Assert.IsType<BookingCreatedResult>(result);
+        Assert.Equal("PAT-000123", created.Appointment.PatientNumber);
+        Assert.Equal("Nimal Perera", created.Appointment.PatientName);
+    }
+
+    [Fact]
+    public async Task A_booking_with_nothing_to_copy_still_succeeds_without_a_name()
+    {
+        // A staff API call with a bare patientId: the booking is what matters, the label is not.
+        var fixture = new Fixture(FreeSlot());
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.IsType<BookingCreatedResult>(result);
+        var appointment = Assert.Single(fixture.Appointments.Added);
+        Assert.Null(appointment.PatientNumber);
+        Assert.Null(appointment.PatientName);
     }
 
     [Fact]

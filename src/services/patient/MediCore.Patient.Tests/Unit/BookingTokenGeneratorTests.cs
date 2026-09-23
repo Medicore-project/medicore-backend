@@ -15,6 +15,8 @@ public sealed class BookingTokenGeneratorTests
 
     private static readonly DateTime Now = new(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc);
     private static readonly Guid PatientId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private const string PatientNumber = "PAT-000123";
+    private const string FullName = "Nimal Perera";
 
     [Fact]
     public void The_token_names_the_one_patient_it_can_book_for()
@@ -29,6 +31,19 @@ public sealed class BookingTokenGeneratorTests
             BookingTokenGenerator.BookingTokenUse,
             token.Claims.Single(c => c.Type == BookingTokenGenerator.TokenUseClaim).Value);
         Assert.Single(token.Claims, c => c.Type == "jti");
+    }
+
+    [Fact]
+    public void The_token_carries_the_number_and_name_the_appointment_is_recorded_under()
+    {
+        var token = Read(Generate().Token);
+
+        Assert.Equal(
+            PatientNumber,
+            token.Claims.Single(c => c.Type == BookingTokenGenerator.PatientNumberClaim).Value);
+        Assert.Equal(
+            FullName,
+            token.Claims.Single(c => c.Type == BookingTokenGenerator.PatientNameClaim).Value);
     }
 
     [Fact]
@@ -98,8 +113,8 @@ public sealed class BookingTokenGeneratorTests
         var generator = CreateGenerator();
 
         Assert.NotEqual(
-            Read(generator.Generate(PatientId).Token).Claims.Single(c => c.Type == "jti").Value,
-            Read(generator.Generate(PatientId).Token).Claims.Single(c => c.Type == "jti").Value);
+            Read(generator.Generate(PatientId, PatientNumber, FullName).Token).Claims.Single(c => c.Type == "jti").Value,
+            Read(generator.Generate(PatientId, PatientNumber, FullName).Token).Claims.Single(c => c.Type == "jti").Value);
     }
 
     [Fact]
@@ -109,11 +124,11 @@ public sealed class BookingTokenGeneratorTests
             new ConfigurationBuilder().AddInMemoryCollection([]).Build(),
             new FixedTimeProvider(Now));
 
-        Assert.Throws<InvalidOperationException>(() => generator.Generate(PatientId));
+        Assert.Throws<InvalidOperationException>(() => generator.Generate(PatientId, PatientNumber, FullName));
     }
 
     private static (string Token, DateTime ExpiresAtUtc) Generate() =>
-        CreateGenerator().Generate(PatientId);
+        CreateGenerator().Generate(PatientId, PatientNumber, FullName);
 
     private static BookingTokenGenerator CreateGenerator() =>
         new(

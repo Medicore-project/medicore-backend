@@ -15,10 +15,21 @@ namespace MediCore.Appointment.Application.DTOs;
 /// </param>
 public sealed record BookAppointmentRequest(Guid SlotId, Guid PatientId, string? ServiceCode);
 
+/// <summary>
+/// Who the booking is for, in the form a person recognises — copied onto the appointment so staff
+/// can see who booked. Both parts are null when the caller had nothing trustworthy to supply.
+/// </summary>
+public sealed record BookingPatientDetails(string? PatientNumber, string? PatientName)
+{
+    public static readonly BookingPatientDetails None = new(null, null);
+}
+
 /// <summary>A confirmed booking.</summary>
 public sealed record AppointmentResponse(
     Guid AppointmentId,
     Guid PatientId,
+    string? PatientNumber,
+    string? PatientName,
     Guid DoctorId,
     Guid SlotId,
     DateTime StartUtc,

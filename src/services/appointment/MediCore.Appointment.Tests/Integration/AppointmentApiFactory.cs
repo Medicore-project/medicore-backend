@@ -52,15 +52,18 @@ public sealed class AppointmentApiFactory : WebApplicationFactory<Program>
     /// The shape is what matters and is asserted on the Patient side: a <c>patientId</c> claim and
     /// <strong>no role claim at all</strong>, signed with the key every service shares.
     /// </remarks>
-    public HttpClient CreateBookingClientFor(Guid patientId)
+    public HttpClient CreateBookingClientFor(
+        Guid patientId,
+        string patientNumber = "PAT-000001",
+        string patientName = "Test Patient")
     {
         var client = CreateClient();
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", CreateBookingToken(patientId));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", CreateBookingToken(patientId, patientNumber, patientName));
         return client;
     }
 
-    private string CreateBookingToken(Guid patientId)
+    private string CreateBookingToken(Guid patientId, string patientNumber, string patientName)
     {
         var configuration = Services.GetRequiredService<IConfiguration>();
         var key = configuration["Jwt:Key"]
@@ -74,6 +77,8 @@ public sealed class AppointmentApiFactory : WebApplicationFactory<Program>
                 new Claim(JwtRegisteredClaimNames.Sub, patientId.ToString()),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim("patientId", patientId.ToString()),
+                new Claim("patientNumber", patientNumber),
+                new Claim("patientName", patientName),
                 new Claim("token_use", "booking")
             ],
             expires: DateTime.UtcNow.AddMinutes(10),

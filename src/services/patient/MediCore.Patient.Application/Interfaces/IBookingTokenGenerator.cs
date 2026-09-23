@@ -25,5 +25,11 @@ namespace MediCore.Patient.Application.Interfaces;
 public interface IBookingTokenGenerator
 {
     /// <summary>The token and the instant it stops being accepted.</summary>
-    (string Token, DateTime ExpiresAtUtc) Generate(Guid patientId);
+    /// <param name="patientNumber">
+    /// Carried so the appointment service can record who a booking is for in a form staff
+    /// recognise. It cannot look the patient up itself — HTTP between services is what SCRUM-33
+    /// removed — and a signed claim is the one channel it can trust for it.
+    /// </param>
+    /// <param name="fullName">Carried for the same reason as <paramref name="patientNumber"/>.</param>
+    (string Token, DateTime ExpiresAtUtc) Generate(Guid patientId, string patientNumber, string fullName);
 }

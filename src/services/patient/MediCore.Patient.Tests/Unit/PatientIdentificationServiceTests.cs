@@ -24,6 +24,16 @@ public sealed class PatientIdentificationServiceTests
     }
 
     [Fact]
+    public async Task The_token_is_minted_with_the_number_and_name_staff_will_see_on_the_booking()
+    {
+        var fixture = new Fixture(Patient());
+
+        await fixture.Service.IdentifyAsync("PAT-000123", DateOfBirth);
+
+        Assert.Equal((PatientId, "PAT-000123", "Nimal Perera"), fixture.Tokens.LastGenerated);
+    }
+
+    [Fact]
     public async Task A_number_nobody_holds_identifies_nobody()
     {
         var fixture = new Fixture(patient: null);
@@ -162,9 +172,12 @@ public sealed class PatientIdentificationServiceTests
     {
         public int GenerateCount { get; private set; }
 
-        public (string Token, DateTime ExpiresAtUtc) Generate(Guid patientId)
+        public (Guid PatientId, string PatientNumber, string FullName)? LastGenerated { get; private set; }
+
+        public (string Token, DateTime ExpiresAtUtc) Generate(Guid patientId, string patientNumber, string fullName)
         {
             GenerateCount++;
+            LastGenerated = (patientId, patientNumber, fullName);
             return ("token-for-" + patientId, new DateTime(2026, 9, 23, 8, 20, 0, DateTimeKind.Utc));
         }
     }

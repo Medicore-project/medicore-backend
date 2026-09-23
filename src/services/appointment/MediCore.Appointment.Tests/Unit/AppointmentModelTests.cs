@@ -79,6 +79,22 @@ public sealed class AppointmentModelTests
             entityType.FindProperty(nameof(AppointmentEntity.ServiceCode))!.GetDefaultValue());
     }
 
+    [Fact]
+    public void The_patient_snapshot_is_optional_and_sized_to_the_patient_service_columns()
+    {
+        // Optional because a staff API booking with a bare patientId has nothing to copy.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var number = entityType.FindProperty(nameof(AppointmentEntity.PatientNumber))!;
+        var name = entityType.FindProperty(nameof(AppointmentEntity.PatientName))!;
+
+        Assert.True(number.IsNullable);
+        Assert.Equal(20, number.GetMaxLength());
+        Assert.True(name.IsNullable);
+        Assert.Equal(256, name.GetMaxLength());
+    }
+
     [Theory]
     [InlineData(ServiceCodes.GeneralConsultation)]
     [InlineData(ServiceCodes.SpecialistConsultation)]

@@ -64,12 +64,18 @@ public interface IAppointmentBookingService
     /// validated by the time it reaches here.
     /// </param>
     /// <param name="correlationId">Carried onto the outbox row and the Kafka header.</param>
+    /// <param name="patientDetails">
+    /// The patient's number and name, recorded on the appointment for display. Resolved by the
+    /// controller alongside <paramref name="patientId"/>, from the same booking token; null when
+    /// there is nothing trustworthy to record.
+    /// </param>
     Task<BookingResult> BookAsync(
         Guid slotId,
         Guid patientId,
         string? serviceCode,
         string actor,
         string correlationId,
+        BookingPatientDetails? patientDetails = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>One appointment by its business key, or null if there is none.</summary>

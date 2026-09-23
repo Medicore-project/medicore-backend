@@ -65,7 +65,7 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         var chosen = slots![0];
 
         // ── Book, with a token naming this patient and carrying no role ───────
-        var patient = _factory.CreateBookingClientFor(_patientId);
+        var patient = _factory.CreateBookingClientFor(_patientId, "PAT-000777", "Kamala Silva");
         var response = await patient.PostAsJsonAsync(
             "/api/appointments",
             new BookAppointmentRequest(chosen.SlotId, Guid.Empty, null));
@@ -74,6 +74,10 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         var appointment = (await response.Content.ReadFromJsonAsync<AppointmentResponse>())!;
         // The patient came from the claim, not from the body, which deliberately sent nothing.
         Assert.Equal(_patientId, appointment.PatientId);
+        // Who booked, copied off the same signed token, so staff can see it without this service
+        // asking the Patient service.
+        Assert.Equal("PAT-000777", appointment.PatientNumber);
+        Assert.Equal("Kamala Silva", appointment.PatientName);
         Assert.Equal(_doctorId, appointment.DoctorId);
         Assert.Equal(chosen.SlotId, appointment.SlotId);
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);

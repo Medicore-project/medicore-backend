@@ -88,6 +88,7 @@ public sealed class AppointmentsController : AppointmentControllerBase
             request.ServiceCode,
             CurrentActor(),
             correlationId,
+            CurrentBookingPatientDetails(),
             cancellationToken);
 
         return result switch

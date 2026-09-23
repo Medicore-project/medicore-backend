@@ -45,6 +45,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         string? serviceCode,
         string actor,
         string correlationId,
+        BookingPatientDetails? patientDetails = null,
         CancellationToken cancellationToken = default)
     {
         // Tracked, because booking mutates the slot. This lookup filters on nothing but the key,
@@ -95,6 +96,8 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         {
             SlotId = slot.SlotId,
             PatientId = patientId,
+            PatientNumber = patientDetails?.PatientNumber,
+            PatientName = patientDetails?.PatientName,
             DoctorId = slot.DoctorId,
             StartUtc = slot.StartUtc,
             EndUtc = slot.EndUtc,
@@ -142,6 +145,8 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
     private static AppointmentResponse ToResponse(AppointmentEntity appointment) => new(
         appointment.AppointmentId,
         appointment.PatientId,
+        appointment.PatientNumber,
+        appointment.PatientName,
         appointment.DoctorId,
         appointment.SlotId,
         appointment.StartUtc,

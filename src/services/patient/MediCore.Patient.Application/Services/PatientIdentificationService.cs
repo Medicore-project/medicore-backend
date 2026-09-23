@@ -36,7 +36,7 @@ public sealed class PatientIdentificationService : IPatientIdentificationService
 
     public BookingIdentityResponse IssueFor(Guid patientId, string patientNumber, string fullName)
     {
-        var (token, expiresAtUtc) = _tokenGenerator.Generate(patientId);
+        var (token, expiresAtUtc) = _tokenGenerator.Generate(patientId, patientNumber, fullName);
 
         return new BookingIdentityResponse(patientId, patientNumber, fullName, token, expiresAtUtc);
     }

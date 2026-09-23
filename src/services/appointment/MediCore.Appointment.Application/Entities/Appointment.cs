@@ -49,6 +49,22 @@ public sealed class Appointment : IAuditableEntity
     public Guid PatientId { get; set; }
 
     /// <summary>
+    /// The patient's number (<c>PAT-000042</c>) as it stood at booking time, so staff can see who
+    /// booked without this service reaching into the Patient service. Copied from the signed
+    /// booking token; null for a booking made by staff through the API with a bare
+    /// <see cref="PatientId"/>, which carries nothing to copy.
+    /// </summary>
+    /// <remarks>
+    /// A snapshot, not a reference: a later rename in the Patient service does not reach rows
+    /// already written. Accepted — the alternative is a patient cache fed by patient-events, which
+    /// is a consumer and a backfill for a display label.
+    /// </remarks>
+    public string? PatientNumber { get; set; }
+
+    /// <summary>The patient's full name at booking time — see <see cref="PatientNumber"/>.</summary>
+    public string? PatientName { get; set; }
+
+    /// <summary>
     /// The doctor, denormalised from the slot. The <c>StaffId</c> from the Identity service, with
     /// no foreign key to <see cref="DoctorCache"/> for the same reason <see cref="Slot.DoctorId"/>
     /// has none — the cache is eventually consistent.

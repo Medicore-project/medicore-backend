@@ -46,6 +46,12 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
         builder.Property(a => a.PatientId).IsRequired();
         builder.Property(a => a.DoctorId).IsRequired();
 
+        // ── Patient display snapshot ─────────────────────────────────────────
+        // Nullable: a staff API booking with a bare patientId has nothing to copy. 20 matches the
+        // Patient service's own PatientNumber column; 256 comfortably holds its 100 + 100 name.
+        builder.Property(a => a.PatientNumber).HasMaxLength(20);
+        builder.Property(a => a.PatientName).HasMaxLength(256);
+
         // ── Time window (denormalised from the slot) ─────────────────────────
         builder.Property(a => a.StartUtc).IsRequired();
         builder.Property(a => a.EndUtc).IsRequired();
