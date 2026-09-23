@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using FluentValidation.Results;
+using MediCore.Appointment.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Appointment.Api.Controllers;
@@ -34,6 +35,19 @@ public abstract class AppointmentControllerBase : ControllerBase
     /// </summary>
     protected Guid? CurrentStaffId() =>
         Guid.TryParse(User.FindFirstValue("staffId"), out var staffId) ? staffId : null;
+
+    /// <summary>
+    /// The patient a booking token was minted for, from the <c>patientId</c> claim the Patient
+    /// service embeds when someone identifies themselves. A staff token never carries it. Null
+    /// means "this caller speaks for no particular patient" — never a wildcard, exactly as with
+    /// <see cref="CurrentStaffId"/>.
+    /// </summary>
+    protected Guid? CurrentBookingPatientId() =>
+        Guid.TryParse(
+            User.FindFirstValue(AppointmentAuthorizationPolicies.PatientIdClaim),
+            out var patientId)
+            ? patientId
+            : null;
 
     /// <summary>
     /// Builds a 400 from FluentValidation failures, keyed by camelCased property name so the

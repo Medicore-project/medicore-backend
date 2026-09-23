@@ -65,6 +65,29 @@ public static class AppointmentAuthorizationPolicies
     /// </remarks>
     public const string LeaveApprover = "LeaveApprover";
 
+    /// <summary>
+    /// Book an appointment. Satisfied two ways — a staff token in a front-desk role, or a booking
+    /// token naming the one patient it was minted for.
+    /// </summary>
+    /// <remarks>
+    /// The two branches are an OR, which is why this is a single assertion policy rather than two
+    /// <c>[Authorize]</c> attributes (those AND) or two <c>RequireRole</c> policies.
+    /// <para>
+    /// Deliberately <strong>not</strong> satisfied by the <c>Patient</c> role. A logged-in patient
+    /// identifies with their patient number and date of birth exactly like an anonymous visitor,
+    /// and gets the same booking token; passing on the role alone would let them post any
+    /// <c>patientId</c> in the body and book for a stranger.
+    /// </para>
+    /// </remarks>
+    public const string BookingCreator = "BookingCreator";
+
+    /// <summary>
+    /// The claim a booking token carries, naming the single patient it can book for. Minted by the
+    /// Patient service's identify and public-register endpoints, signed with the symmetric key
+    /// every service shares. A staff token never carries it.
+    /// </summary>
+    public const string PatientIdClaim = "patientId";
+
     public static IServiceCollection AddAppointmentAuthorization(this IServiceCollection services)
     {
         services.AddAuthorizationBuilder()
@@ -75,7 +98,11 @@ public static class AppointmentAuthorizationPolicies
             .AddPolicy(HolidayManager, policy => policy.RequireRole("Admin"))
             .AddPolicy(LeaveManager, policy => policy.RequireRole("Doctor"))
             .AddPolicy(LeaveReader, policy => policy.RequireRole("Admin", "Doctor"))
-            .AddPolicy(LeaveApprover, policy => policy.RequireRole("Admin"));
+            .AddPolicy(LeaveApprover, policy => policy.RequireRole("Admin"))
+            .AddPolicy(BookingCreator, policy => policy.RequireAssertion(context =>
+                context.User.IsInRole("Admin")
+                || context.User.IsInRole("Receptionist")
+                || context.User.HasClaim(claim => claim.Type == PatientIdClaim)));
 
         return services;
     }
