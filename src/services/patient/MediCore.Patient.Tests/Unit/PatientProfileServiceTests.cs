@@ -181,6 +181,12 @@ public sealed class PatientProfileServiceTests
             bool includeArchived,
             CancellationToken cancellationToken = default) => Task.FromResult(_patient);
 
+        public Task<PatientEntity?> FindByPatientNumberAndDateOfBirthAsync(
+            string normalizedPatientNumber,
+            DateOnly dateOfBirth,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only public booking identifies a patient this way.");
+
         public Task AddAsync(PatientEntity patient, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
