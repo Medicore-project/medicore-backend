@@ -453,6 +453,10 @@ public sealed class AppointmentBookingServiceTests
             string? specialization, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Booking works from one doctor, not a listing.");
 
+        public Task<IReadOnlyList<string>> ListSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the public booking page lists specializations.");
+
         public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Booking never writes the cache.");
     }

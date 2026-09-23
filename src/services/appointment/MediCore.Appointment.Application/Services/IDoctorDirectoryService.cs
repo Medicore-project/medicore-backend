@@ -21,6 +21,12 @@ public interface IDoctorDirectoryService
         string? specialization,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The distinct specializations that currently have a bookable doctor, ordered. Empty ones are
+    /// left out.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListSpecializationsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>The doctor if bookable; null when unknown or inactive.</summary>
     Task<DoctorResponse?> GetBookableAsync(
         Guid doctorId,

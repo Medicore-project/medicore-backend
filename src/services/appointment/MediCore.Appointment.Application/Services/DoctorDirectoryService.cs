@@ -22,6 +22,10 @@ public sealed class DoctorDirectoryService : IDoctorDirectoryService
         return doctors.Select(ToResponse).ToList();
     }
 
+    public Task<IReadOnlyList<string>> ListSpecializationsAsync(
+        CancellationToken cancellationToken = default) =>
+        _repository.ListSpecializationsAsync(cancellationToken);
+
     public async Task<DoctorResponse?> GetBookableAsync(
         Guid doctorId,
         CancellationToken cancellationToken = default)

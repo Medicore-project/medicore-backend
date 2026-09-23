@@ -437,6 +437,10 @@ public sealed class StaffEventHandlerTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("The handler never lists doctors.");
 
+        public Task<IReadOnlyList<string>> ListSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the public booking page lists specializations.");
+
         public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default)
         {
             Added.Add(doctor);

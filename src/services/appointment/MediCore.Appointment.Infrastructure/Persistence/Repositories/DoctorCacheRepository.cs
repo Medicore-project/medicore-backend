@@ -47,6 +47,16 @@ public sealed class DoctorCacheRepository : IDoctorCacheRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<string>> ListSpecializationsAsync(
+        CancellationToken cancellationToken = default) =>
+        await _dbContext.DoctorCaches
+            .AsNoTracking()
+            .Where(doctor => doctor.IsActive && doctor.Specialization != "")
+            .Select(doctor => doctor.Specialization)
+            .Distinct()
+            .OrderBy(specialization => specialization)
+            .ToListAsync(cancellationToken);
+
     public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default) =>
         _dbContext.DoctorCaches.AddAsync(doctor, cancellationToken).AsTask();
 }

@@ -248,6 +248,10 @@ public sealed class DoctorCacheEnforcementTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Scheduling never lists doctors.");
 
+        public Task<IReadOnlyList<string>> ListSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the public booking page lists specializations.");
+
         public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Scheduling never writes to the doctor cache.");
     }
