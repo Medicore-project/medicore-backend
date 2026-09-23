@@ -82,6 +82,17 @@ public static class AppointmentAuthorizationPolicies
     public const string BookingCreator = "BookingCreator";
 
     /// <summary>
+    /// Read one's own bookings — satisfied only by a booking token, through its <c>patientId</c>
+    /// claim.
+    /// </summary>
+    /// <remarks>
+    /// A staff token carries no such claim and is refused: staff read bookings through
+    /// <see cref="ScheduleReader"/>, and "mine" means nothing for them. Whose bookings come back is
+    /// taken from the claim, never from the request, so the endpoint takes no id at all.
+    /// </remarks>
+    public const string BookingHolder = "BookingHolder";
+
+    /// <summary>
     /// The claim a booking token carries, naming the single patient it can book for. Minted by the
     /// Patient service's identify and public-register endpoints, signed with the symmetric key
     /// every service shares. A staff token never carries it.
@@ -111,7 +122,8 @@ public static class AppointmentAuthorizationPolicies
             .AddPolicy(BookingCreator, policy => policy.RequireAssertion(context =>
                 context.User.IsInRole("Admin")
                 || context.User.IsInRole("Receptionist")
-                || context.User.HasClaim(claim => claim.Type == PatientIdClaim)));
+                || context.User.HasClaim(claim => claim.Type == PatientIdClaim)))
+            .AddPolicy(BookingHolder, policy => policy.RequireClaim(PatientIdClaim));
 
         return services;
     }

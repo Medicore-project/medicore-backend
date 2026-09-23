@@ -39,3 +39,42 @@ public sealed record AppointmentResponse(
     string ServiceCode,
     string Status,
     DateTime CreatedAt);
+
+/// <summary>
+/// One appointment as clinic staff see it in the booking grid and the appointments list — who it
+/// is for, with whom, and when.
+/// </summary>
+/// <param name="PatientNumber">Null for a booking made with a bare patient id; see the entity.</param>
+/// <param name="DoctorName">Null only when the doctor cache has never heard of the doctor.</param>
+public sealed record AppointmentSummaryResponse(
+    Guid AppointmentId,
+    Guid PatientId,
+    string? PatientNumber,
+    string? PatientName,
+    Guid DoctorId,
+    string? DoctorName,
+    string? Specialization,
+    Guid SlotId,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    DateOnly SlotDate,
+    int DurationMinutes,
+    string ServiceCode,
+    string Status,
+    DateTime CreatedAt);
+
+/// <summary>One of the caller's own upcoming appointments, for the public booking page.</summary>
+/// <remarks>
+/// Reduced on purpose, like the other public DTOs: no patient id, no slot id, no audit columns. The
+/// caller already knows who they are; what they need is with whom and when.
+/// </remarks>
+public sealed record PatientAppointmentResponse(
+    Guid AppointmentId,
+    string? DoctorName,
+    string? Specialization,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    DateOnly SlotDate,
+    int DurationMinutes,
+    string ServiceCode,
+    string Status);

@@ -22,15 +22,108 @@ namespace MediCore.Appointment.Api.Controllers;
 [Route("api/appointments")]
 public sealed class AppointmentsController : AppointmentControllerBase
 {
+    /// <summary>
+    /// The widest date range one list request may cover — a quarter. Enough for any screen that
+    /// exists; anything wider is a mistake or a scrape, not a view.
+    /// </summary>
+    public const int MaxListDays = 92;
+
+    /// <summary>What an unbounded list request covers: today and the six days after it.</summary>
+    public const int DefaultListDays = 7;
+
     private readonly IValidator<BookAppointmentRequest> _validator;
     private readonly IAppointmentBookingService _service;
+    private readonly IAppointmentQueryService _queries;
+    private readonly TimeProvider _timeProvider;
 
     public AppointmentsController(
         IValidator<BookAppointmentRequest> validator,
-        IAppointmentBookingService service)
+        IAppointmentBookingService service,
+        IAppointmentQueryService queries,
+        TimeProvider timeProvider)
     {
         _validator = validator;
         _service = service;
+        _queries = queries;
+        _timeProvider = timeProvider;
+    }
+
+    // ── GET /api/appointments ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// What is booked — for one doctor or the whole clinic — on Asia/Colombo dates
+    /// <c>from</c>..<c>to</c> inclusive. Defaults to the coming week. Every status is returned, so
+    /// the caller decides whether a cancelled visit is worth showing.
+    /// </summary>
+    /// <remarks>
+    /// This is what makes a booking visible to the clinic. The availability listing only ever
+    /// returns free slots, so without it a booked slot simply vanished from the grid with no way to
+    /// see who had taken it.
+    /// </remarks>
+    [HttpGet]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.ScheduleReader)]
+    [ProducesResponseType(typeof(IReadOnlyList<AppointmentSummaryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> List(
+        [FromQuery] Guid? doctorId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken)
+    {
+        var start = from ?? ColomboTime.Today(_timeProvider);
+        var end = to ?? start.AddDays(DefaultListDays - 1);
+
+        if (start > end)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "The 'from' date must not be after the 'to' date.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        if (end.DayNumber - start.DayNumber + 1 > MaxListDays)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = $"A list may cover at most {MaxListDays} days.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return Ok(await _queries.ListAsync(
+            doctorId == Guid.Empty ? null : doctorId,
+            start,
+            end,
+            cancellationToken));
+    }
+
+    // ── GET /api/appointments/mine ────────────────────────────────────────────
+
+    /// <summary>
+    /// The booking token holder's own appointments that are still booked and yet to start.
+    /// </summary>
+    /// <remarks>
+    /// Takes no patient id: the patient is the token's <c>patientId</c> claim and nothing else, so
+    /// a token can only ever read the bookings of the one patient who identified to get it.
+    /// </remarks>
+    [HttpGet("mine")]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.BookingHolder)]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientAppointmentResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> Mine(CancellationToken cancellationToken)
+    {
+        // BookingHolder guarantees the claim is present; a malformed value is still refused rather
+        // than read as "nobody".
+        if (CurrentBookingPatientId() is not { } patientId)
+        {
+            return ForbiddenProblem("This token does not name a patient.");
+        }
+
+        return Ok(await _queries.ListUpcomingForPatientAsync(patientId, cancellationToken));
     }
 
     // ── POST /api/appointments ────────────────────────────────────────────────

@@ -214,6 +214,49 @@ public sealed class AppointmentAuthorizationPolicyTests
     }
 
     [Fact]
+    public void The_clinic_appointment_list_requires_the_schedule_reader_policy()
+    {
+        // The same audience as the booking grid it feeds.
+        var attribute = Assert.Single(
+            GetAuthorizeAttributes<AppointmentsController>(nameof(AppointmentsController.List)));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.ScheduleReader, attribute.Policy);
+    }
+
+    [Fact]
+    public void Reading_ones_own_bookings_requires_the_booking_holder_policy()
+    {
+        var attribute = Assert.Single(
+            GetAuthorizeAttributes<AppointmentsController>(nameof(AppointmentsController.Mine)));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.BookingHolder, attribute.Policy);
+    }
+
+    [Fact]
+    public async Task A_booking_token_holds_its_own_bookings()
+    {
+        var result = await AuthorizeAsync(
+            AppointmentAuthorizationPolicies.BookingHolder,
+            new Claim(AppointmentAuthorizationPolicies.PatientIdClaim, Guid.NewGuid().ToString()));
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Receptionist")]
+    [InlineData("Doctor")]
+    [InlineData("Nurse")]
+    // A logged-in Patient role is not a booking token either: "mine" is whoever the token names.
+    [InlineData("Patient")]
+    public async Task No_role_alone_holds_a_patients_bookings(string role)
+    {
+        var result = await AuthorizeAsync(role, AppointmentAuthorizationPolicies.BookingHolder);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
     public void Booking_is_not_anonymous()
     {
         // The gateway does not authenticate. An anonymous booking endpoint would let anyone take

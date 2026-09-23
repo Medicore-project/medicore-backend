@@ -66,6 +66,22 @@ public sealed class AppointmentModelTests
     }
 
     [Fact]
+    public void The_clinic_list_is_indexed_on_date_then_doctor()
+    {
+        // Date first, so the clinic-wide list uses the index as well as the per-doctor grid.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ix_appointments_date_doctor");
+
+        Assert.Equal(
+            [nameof(AppointmentEntity.SlotDate), nameof(AppointmentEntity.DoctorId)],
+            index.Properties.Select(p => p.Name));
+        Assert.False(index.IsUnique);
+    }
+
+    [Fact]
     public void A_new_appointment_is_booked_and_generally_billed()
     {
         using var context = CreateContext();

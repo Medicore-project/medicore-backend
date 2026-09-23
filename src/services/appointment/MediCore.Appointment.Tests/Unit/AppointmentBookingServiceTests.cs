@@ -471,6 +471,14 @@ public sealed class AppointmentBookingServiceTests
             Task.FromResult(_existing
                 .Concat(Added)
                 .FirstOrDefault(appointment => appointment.AppointmentId == appointmentId));
+
+        public Task<IReadOnlyList<AppointmentListing>> ListAsync(
+            Guid? doctorId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Booking never lists appointments.");
+
+        public Task<IReadOnlyList<AppointmentListing>> ListUpcomingForPatientAsync(
+            Guid patientId, DateTime nowUtc, int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Booking never lists appointments.");
     }
 
     private sealed class FakeDoctorCacheRepository : IDoctorCacheRepository

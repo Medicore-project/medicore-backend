@@ -171,6 +171,74 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
+    [Fact]
+    public async Task A_booking_is_visible_to_the_clinic_and_to_its_own_patient_only()
+    {
+        // Before this, a booked slot left the availability listing and appeared nowhere else, so
+        // neither staff nor the patient could see who had taken it.
+        await GiveTheDoctorWorkingHoursAsync();
+        var slots = await _factory.CreateClient().GetFromJsonAsync<List<PublicSlotResponse>>(
+            $"/api/public/booking/slots?doctorId={_doctorId}");
+        var chosen = slots![0];
+
+        var patient = _factory.CreateBookingClientFor(_patientId, "PAT-000778", "Sunil Fernando");
+        var booked = await patient.PostAsJsonAsync(
+            "/api/appointments", new BookAppointmentRequest(chosen.SlotId, Guid.Empty, null));
+        Assert.Equal(HttpStatusCode.Created, booked.StatusCode);
+
+        // ── Staff see who booked, with whom ───────────────────────────────────
+        var receptionist = _factory.CreateClientAs("Receptionist");
+        var clinic = await receptionist.GetFromJsonAsync<List<AppointmentSummaryResponse>>(
+            $"/api/appointments?doctorId={_doctorId}&from={chosen.SlotDate:yyyy-MM-dd}&to={chosen.SlotDate:yyyy-MM-dd}");
+        var seen = Assert.Single(clinic!);
+        Assert.Equal(chosen.SlotId, seen.SlotId);
+        Assert.Equal("PAT-000778", seen.PatientNumber);
+        Assert.Equal("Sunil Fernando", seen.PatientName);
+        Assert.Equal("Nimal Perera", seen.DoctorName);
+        Assert.Equal(_specialization, seen.Specialization);
+
+        // ── The patient sees their own booking ────────────────────────────────
+        var mine = await patient.GetFromJsonAsync<List<PatientAppointmentResponse>>(
+            "/api/appointments/mine");
+        var own = Assert.Single(mine!);
+        Assert.Equal(chosen.StartUtc, own.StartUtc);
+        Assert.Equal("Nimal Perera", own.DoctorName);
+
+        // ── ...and nobody else's ──────────────────────────────────────────────
+        var stranger = _factory.CreateBookingClientFor(Guid.NewGuid());
+        Assert.Empty((await stranger.GetFromJsonAsync<List<PatientAppointmentResponse>>(
+            "/api/appointments/mine"))!);
+
+        // The patient-facing shape is reduced, on the wire.
+        var raw = await patient.GetStringAsync("/api/appointments/mine");
+        Assert.DoesNotContain("patientId", raw, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("slotId", raw, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Reading_bookings_is_split_between_staff_and_token_holders()
+    {
+        // "mine" means nothing for a staff token, and the clinic list is not a token holder's.
+        var staffMine = await _factory.CreateClientAs("Receptionist").GetAsync("/api/appointments/mine");
+        Assert.Equal(HttpStatusCode.Forbidden, staffMine.StatusCode);
+
+        var tokenList = await _factory.CreateBookingClientFor(_patientId).GetAsync("/api/appointments");
+        Assert.Equal(HttpStatusCode.Forbidden, tokenList.StatusCode);
+
+        var anonymous = await _factory.CreateClient().GetAsync("/api/appointments/mine");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("from=2026-10-10&to=2026-10-01")]
+    [InlineData("from=2026-01-01&to=2026-12-31")]
+    public async Task A_list_range_that_is_backwards_or_too_wide_is_refused(string query)
+    {
+        var response = await _factory.CreateClientAs("Admin").GetAsync($"/api/appointments?{query}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task GiveTheDoctorWorkingHoursAsync()

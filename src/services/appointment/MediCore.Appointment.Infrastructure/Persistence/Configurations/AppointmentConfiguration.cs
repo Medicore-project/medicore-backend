@@ -90,6 +90,11 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
         builder.HasIndex(a => new { a.PatientId, a.StartUtc })
             .HasDatabaseName("ix_appointments_patient_start");
 
+        // The staff list and the booking grid — "what is booked on these dates", clinic-wide or for
+        // one doctor. Date first so the clinic-wide query can use it too.
+        builder.HasIndex(a => new { a.SlotDate, a.DoctorId })
+            .HasDatabaseName("ix_appointments_date_doctor");
+
         // ── Global query filter (soft-delete) ────────────────────────────────
         builder.HasQueryFilter(a => !a.IsDeleted);
     }
