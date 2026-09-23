@@ -1,3 +1,4 @@
+using Confluent.Kafka;
 using MediCore.Appointment.Application.Interfaces;
 using MediCore.Appointment.Infrastructure.Messaging;
 using MediCore.Appointment.Infrastructure.Persistence;
@@ -28,11 +29,12 @@ public static class DependencyInjection
         services.AddScoped<IDoctorLeaveRepository, DoctorLeaveRepository>();
         services.AddScoped<IDoctorCacheRepository, DoctorCacheRepository>();
         services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
+        // Registered unconditionally: booking writes outbox rows whether or not a broker exists.
+        services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IUnitOfWork, AppointmentUnitOfWork>();
 
         AddStaffEventsConsumer(services, configuration);
-
-        // The Kafka outbox processor is wired up when event publishing lands (SCRUM-34).
+        AddOutboxPublisher(services, configuration);
 
         return services;
     }
@@ -66,5 +68,31 @@ public static class DependencyInjection
         services.AddSingleton<IStaffKafkaConsumerFactory, StaffKafkaConsumerFactory>();
         services.AddScoped<IStaffEventProcessor, StaffEventProcessor>();
         services.AddHostedService<StaffEventsConsumer>();
+    }
+
+    /// <summary>
+    /// Drains the outbox to Kafka. Skipped when <c>Kafka:BootstrapServers</c> is not set, exactly
+    /// as <see cref="AddStaffEventsConsumer"/> is — a host without Kafka must still start and
+    /// bookings must still save, with their event rows simply waiting for a host that has a broker.
+    /// Deliberately not the Patient service's throw-if-missing: the integration test host blanks
+    /// this setting on purpose.
+    /// </summary>
+    private static void AddOutboxPublisher(IServiceCollection services, IConfiguration configuration)
+    {
+        var bootstrapServers = configuration["Kafka:BootstrapServers"];
+        if (string.IsNullOrWhiteSpace(bootstrapServers))
+        {
+            return;
+        }
+
+        services.AddSingleton<IProducer<string, string>>(_ =>
+            new ProducerBuilder<string, string>(new ProducerConfig
+            {
+                BootstrapServers = bootstrapServers,
+                EnableIdempotence = true,
+                Acks = Acks.All
+            }).Build());
+        services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
+        services.AddHostedService<OutboxProcessor>();
     }
 }
