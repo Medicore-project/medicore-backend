@@ -61,5 +61,14 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
             _dbContext.ChangeTracker.Clear();
             throw new DuplicateProcessedMessageException(exception);
         }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            // A slot's xmin no longer matched what we read: another writer committed first. The
+            // transaction rolled back, so nothing of ours is saved. Clearing the tracker means a
+            // caller that retries re-reads the slot from the database instead of reusing the
+            // stale copy.
+            _dbContext.ChangeTracker.Clear();
+            throw new ConcurrentUpdateException(exception);
+        }
     }
 }

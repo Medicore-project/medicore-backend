@@ -13,5 +13,11 @@ public interface IUnitOfWork
     /// A slot already exists for that doctor and instant — two reconciliations of the same doctor
     /// raced each other.
     /// </exception>
+    /// <exception cref="Exceptions.SlotAlreadyBookedException">
+    /// An active appointment already exists for that slot.
+    /// </exception>
+    /// <exception cref="Exceptions.ConcurrentUpdateException">
+    /// A slot this save updates or deletes was changed by someone else after it was read.
+    /// </exception>
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

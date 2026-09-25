@@ -23,6 +23,9 @@ public sealed class SlotConfiguration : IEntityTypeConfiguration<Slot>
     internal const string DoctorStartUniqueFilter =
         "\"IsDeleted\" = false AND \"Status\" <> 'Flagged'";
 
+    /// <summary>The shadow concurrency token, mapped to <c>xmin</c>.</summary>
+    internal const string VersionPropertyName = "Version";
+
     public void Configure(EntityTypeBuilder<Slot> builder)
     {
         builder.ToTable("slots");
@@ -52,6 +55,14 @@ public sealed class SlotConfiguration : IEntityTypeConfiguration<Slot>
         builder.Property(s => s.IsDeleted).HasDefaultValue(false).IsRequired();
         builder.Property(s => s.CreatedBy).HasMaxLength(100).IsRequired();
         builder.Property(s => s.UpdatedBy).HasMaxLength(100);
+
+        // ── Optimistic concurrency (SCRUM-35) ────────────────────────────────
+        // Npgsql maps a uint row version to Postgres's xmin system column, which the database
+        // changes on every write, so no column is added and no writer has to remember to bump it.
+        // Every UPDATE and DELETE of a slot then carries "AND xmin = @read", and a writer whose
+        // read has gone stale matches no row. A shadow property keeps the Postgres detail out of
+        // the Application entity.
+        builder.Property<uint>(VersionPropertyName).IsRowVersion();
 
         // ── Relationships ────────────────────────────────────────────────────
 
