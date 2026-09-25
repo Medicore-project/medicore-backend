@@ -143,6 +143,23 @@ services:
       - medicore-net
 
   # -------------------------------------------------------------------------
+  # Kafka Exporter — Prometheus metrics for Kafka topics and consumer groups
+  # -------------------------------------------------------------------------
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: medicore-kafka-exporter
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      - "--kafka.server=kafka:9092"
+    ports:
+      - "${KAFKA_EXPORTER_PORT:-9308}:9308"
+    networks:
+      - medicore-net
+
+  # -------------------------------------------------------------------------
   # Seq — structured log ingestion and query
   # Ingest: http://localhost:5341  |  UI: http://localhost:5341
   # -------------------------------------------------------------------------
@@ -186,6 +203,7 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     networks:
       - medicore-net
