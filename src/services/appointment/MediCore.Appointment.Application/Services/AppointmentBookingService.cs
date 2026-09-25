@@ -1,3 +1,4 @@
+using MediCore.Appointment.Application.Concurrency;
 using MediCore.Appointment.Application.DTOs;
 using MediCore.Appointment.Application.Entities;
 using MediCore.Appointment.Application.Exceptions;
@@ -39,6 +40,25 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         _timeProvider = timeProvider;
     }
 
+    /// <remarks>
+    /// <para>
+    /// SCRUM-35. Three layers keep two patients off one slot, and one patient off two overlapping
+    /// slots, however many requests arrive at once:
+    /// </para>
+    /// <list type="number">
+    /// <item>A per-patient lock, taken first inside the transaction, so one patient's bookings run
+    /// one at a time and the overlap check always sees the previous booking.</item>
+    /// <item>The slot row's optimistic concurrency token: of two bookings that both read the slot
+    /// Available, the later save matches no row and loses.</item>
+    /// <item><c>ux_appointments_slot</c>, one active appointment per slot, as the backstop.</item>
+    /// </list>
+    /// <para>
+    /// A lost token race (or a deadlock) re-runs the whole attempt in a new transaction, which
+    /// re-reads the slot and answers from what it now is. Losing to the index is not retried: the
+    /// slot is taken, and that is already the answer. Every attempt commits the slot change, the
+    /// appointment and the outbox row together or not at all, so a loser leaves nothing behind.
+    /// </para>
+    /// </remarks>
     public async Task<BookingResult> BookAsync(
         Guid slotId,
         Guid patientId,
@@ -48,6 +68,56 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         BookingPatientDetails? patientDetails = null,
         CancellationToken cancellationToken = default)
     {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                var result = await _unitOfWork.ExecuteInTransactionAsync(
+                    token => AttemptAsync(
+                        slotId, patientId, serviceCode, actor, correlationId, patientDetails, token),
+                    cancellationToken);
+
+                // A retry that now finds the slot Booked is the loser of the race it was retrying,
+                // so it says so in the race's words rather than as a plain status.
+                return attempt > 1 && result is BookingSlotNotAvailableResult { CurrentStatus: SlotStatus.Booked }
+                    ? new BookingSlotTakenResult()
+                    : result;
+            }
+            catch (SlotAlreadyBookedException)
+            {
+                // ux_appointments_slot caught a racer that got past the slot token — the backstop.
+                // The transaction rolled back, taking the slot change and the outbox row with it.
+                return new BookingSlotTakenResult();
+            }
+            catch (ConcurrentUpdateException) when (attempt < ConcurrencyRetry.MaxAttempts)
+            {
+                // The slot changed under us, or Postgres broke a deadlock. Nothing committed and
+                // nothing is tracked, so go round and read everything again.
+            }
+            catch (ConcurrentUpdateException)
+            {
+                return new BookingContendedResult();
+            }
+        }
+    }
+
+    /// <summary>
+    /// One read-decide-write, run inside a transaction by <see cref="BookAsync"/>. Throws rather
+    /// than returning when the save loses a race, so the transaction rolls back.
+    /// </summary>
+    private async Task<BookingResult> AttemptAsync(
+        Guid slotId,
+        Guid patientId,
+        string? serviceCode,
+        string actor,
+        string correlationId,
+        BookingPatientDetails? patientDetails,
+        CancellationToken cancellationToken)
+    {
+        // First, before any read: held until this transaction ends, so a concurrent booking for
+        // the same patient waits here and then sees this one in its overlap check.
+        await _appointmentRepository.LockPatientAsync(patientId, cancellationToken);
+
         // Tracked, because booking mutates the slot. This lookup filters on nothing but the key,
         // so every guard below is this method's responsibility.
         var slot = await _slotRepository.GetTrackedBySlotIdAsync(slotId, cancellationToken);
@@ -113,21 +183,10 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             AppointmentOutboxMessages.Booked(appointment, correlationId, nowUtc),
             cancellationToken);
 
-        try
-        {
-            // One save for the slot mutation, the appointment and the event row. EF wraps it in a
-            // single transaction, so AC1 and AC4 commit together or not at all — the transactional
-            // outbox, without needing an explicit transaction anywhere in this service.
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (SlotAlreadyBookedException)
-        {
-            // ux_appointments_slot caught a racer that passed the status check at the same moment
-            // we did. The unit of work has cleared the change tracker, taking the slot mutation and
-            // the outbox row with it — correct, since nothing committed. Report and stop; this
-            // scoped context must not be saved again.
-            return new BookingSlotTakenResult();
-        }
+        // One save for the slot mutation, the appointment and the event row, inside the caller's
+        // transaction, so AC1 and AC4 of SCRUM-34 commit together or not at all — the
+        // transactional outbox. A lost race throws out of here and is handled by BookAsync.
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new BookingCreatedResult(ToResponse(appointment));
     }

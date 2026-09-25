@@ -20,4 +20,19 @@ public interface IUnitOfWork
     /// A slot this save updates or deletes was changed by someone else after it was read.
     /// </exception>
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> inside one explicit database transaction: committed if it
+    /// returns, rolled back if it throws. SCRUM-35 — booking needs its reads and its write in the
+    /// same transaction so that a lock taken at the start holds until the write commits.
+    /// </summary>
+    /// <remarks>
+    /// Whatever happens, a failure leaves the change tracker empty, so a caller that retries reads
+    /// afresh. A deadlock or serialization failure is rethrown as
+    /// <see cref="Exceptions.ConcurrentUpdateException"/>: like a stale concurrency token, it means
+    /// another writer got in the way and the whole operation should simply run again.
+    /// </remarks>
+    Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken = default);
 }

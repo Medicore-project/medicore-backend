@@ -43,6 +43,19 @@ public interface IAppointmentRepository
     /// booked, never who they are, so nothing crosses a service boundary.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Takes a transaction-scoped lock on one patient's bookings, waiting while another
+    /// transaction holds it. Released automatically when the transaction commits or rolls back,
+    /// so it must be called inside <see cref="IUnitOfWork.ExecuteInTransactionAsync{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// SCRUM-35. The overlap check reads, then the booking writes; two bookings for one patient at
+    /// overlapping times could both read "no clash" and both write, because a time-range overlap
+    /// cannot be a unique index. Holding this lock from before the read until the commit makes the
+    /// second booking read after the first has committed, so it sees the clash.
+    /// </remarks>
+    Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
+
     Task<AppointmentEntity?> FindPatientOverlapAsync(
         Guid patientId,
         DateTime startUtc,

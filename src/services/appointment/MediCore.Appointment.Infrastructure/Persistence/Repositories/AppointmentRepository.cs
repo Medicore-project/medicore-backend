@@ -20,6 +20,32 @@ public sealed class AppointmentRepository : IAppointmentRepository
         return _dbContext.Appointments.AddAsync(appointment, cancellationToken).AsTask();
     }
 
+    public Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default)
+    {
+        // The two-key form, so the lock lives in its own namespace: Postgres advisory locks are
+        // database-wide, and every service shares this database. The key folds the Guid to 32
+        // bits; two patients colliding only means their bookings queue behind each other, which
+        // is slower, never wrong. Both values are bound as parameters.
+        var key = PatientLockKey(patientId);
+
+        return _dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({PatientBookingLockNamespace}, {key})",
+            cancellationToken);
+    }
+
+    /// <summary>Advisory-lock namespace for "one patient's bookings". Arbitrary but fixed.</summary>
+    internal const int PatientBookingLockNamespace = 35_001;
+
+    /// <summary>A stable 32-bit fold of the patient id: the same Guid always gives the same key.</summary>
+    internal static int PatientLockKey(Guid patientId)
+    {
+        var bytes = patientId.ToByteArray();
+        return BitConverter.ToInt32(bytes, 0)
+            ^ BitConverter.ToInt32(bytes, 4)
+            ^ BitConverter.ToInt32(bytes, 8)
+            ^ BitConverter.ToInt32(bytes, 12);
+    }
+
     public Task<AppointmentEntity?> FindPatientOverlapAsync(
         Guid patientId,
         DateTime startUtc,
