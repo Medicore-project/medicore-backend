@@ -112,6 +112,8 @@ using (var scope = app.Services.CreateScope())
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
+// Inside the request logging, so the log records the 409 this produces rather than a 500.
+app.UseMiddleware<ConcurrencyConflictMiddleware>();
 app.UseHttpMetrics();
 app.UseAuthentication();
 app.UseAuthorization();
