@@ -63,12 +63,17 @@ builder.Services
 
 builder.Services.AddAppointmentAuthorization();
 
+// Defaults to 100 a minute; only the load test raises it. See AppointmentRateLimitOptions.
+var defaultRateLimit = builder.Configuration
+    .GetSection(AppointmentRateLimitOptions.SectionName)
+    .Get<AppointmentRateLimitOptions>() ?? new AppointmentRateLimitOptions();
+
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("appointment-default", limiter =>
+    options.AddFixedWindowLimiter(AppointmentRateLimitOptions.PolicyName, limiter =>
     {
-        limiter.PermitLimit = 100;
-        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.PermitLimit = defaultRateLimit.PermitLimit;
+        limiter.Window = TimeSpan.FromSeconds(defaultRateLimit.WindowSeconds);
         limiter.QueueLimit = 0;
         limiter.AutoReplenishment = true;
     });
@@ -125,7 +130,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapControllers().RequireRateLimiting("appointment-default");
+app.MapControllers().RequireRateLimiting(AppointmentRateLimitOptions.PolicyName);
 app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => true });
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

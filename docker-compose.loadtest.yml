@@ -1,0 +1,25 @@
+# -----------------------------------------------------------------------------
+# SCRUM-35 — concurrent booking load test ONLY. Never use for development or deployment.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml up -d --build appointment-api
+#
+# Two changes to appointment-api, nothing else:
+#
+# 1. Publishes the service on http://localhost:5003. The base compose file publishes only the
+#    gateway (:5000), and the gateway rate-limits each client IP to 100 requests a minute, so a
+#    load test through it would measure 429s. The test calls the service directly instead.
+#
+# 2. Raises the service-wide rate limit (default 100 a minute across all callers, see
+#    AppointmentRateLimitOptions) so the limiter does not answer before the booking logic does.
+#    The anonymous booking reads keep their separate 60-a-minute limit: fetch slots once in setup,
+#    not in every thread.
+#
+# Afterwards, put the normal container back:
+#   docker compose up -d --build appointment-api
+# -----------------------------------------------------------------------------
+services:
+  appointment-api:
+    ports:
+      - "5003:8080"
+    environment:
+      RateLimiting__AppointmentDefault__PermitLimit: "${LOADTEST_PERMIT_LIMIT:-100000}"
