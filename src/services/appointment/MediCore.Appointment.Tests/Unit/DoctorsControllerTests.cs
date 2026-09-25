@@ -134,6 +134,10 @@ public sealed class DoctorsControllerTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("The directory never writes to the doctor cache.");
 
+        public Task<IReadOnlyList<string>> ListSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the public booking page lists specializations.");
+
         public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("The directory never writes to the doctor cache.");
     }

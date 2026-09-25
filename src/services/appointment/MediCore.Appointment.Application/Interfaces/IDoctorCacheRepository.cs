@@ -22,6 +22,15 @@ public interface IDoctorCacheRepository
         string? specialization,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The distinct specializations of bookable doctors, ordered, with blanks left out.
+    /// </summary>
+    /// <remarks>
+    /// Specialization is free text in Identity and may be empty, so an unset one must not appear
+    /// as a nameless choice on the public booking page.
+    /// </remarks>
+    Task<IReadOnlyList<string>> ListSpecializationsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Stages a new row for insertion (not yet committed).</summary>
     Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default);
 }

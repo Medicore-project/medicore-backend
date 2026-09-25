@@ -157,6 +157,116 @@ public sealed class AppointmentAuthorizationPolicyTests
             .Where(method => method.GetCustomAttribute<AllowAnonymousAttribute>() is not null));
     }
 
+    // ── Booking (SCRUM-34) ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Admin", true)]
+    [InlineData("Receptionist", true)]
+    [InlineData("Doctor", false)]
+    [InlineData("Nurse", false)]
+    // A logged-in patient identifies with their patient number and date of birth like anyone else
+    // and books with the token that produces. Passing on the role alone would let them post any
+    // patientId in the body and book for a stranger.
+    [InlineData("Patient", false)]
+    public async Task Booking_by_role_is_front_desk_only(string role, bool expected)
+    {
+        var result = await AuthorizeAsync(role, AppointmentAuthorizationPolicies.BookingCreator);
+
+        Assert.Equal(expected, result.Succeeded);
+    }
+
+    [Fact]
+    public async Task A_booking_token_satisfies_the_policy_with_no_role_at_all()
+    {
+        // This is the whole point of the assertion policy: the two branches are an OR. A booking
+        // token deliberately carries no role claim, so it passes here and nowhere else.
+        var result = await AuthorizeAsync(
+            AppointmentAuthorizationPolicies.BookingCreator,
+            new Claim(AppointmentAuthorizationPolicies.PatientIdClaim, Guid.NewGuid().ToString()));
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task A_caller_with_neither_a_front_desk_role_nor_a_patient_claim_is_refused()
+    {
+        var result = await AuthorizeAsync(AppointmentAuthorizationPolicies.BookingCreator);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void Booking_requires_the_booking_creator_policy()
+    {
+        var attribute = Assert.Single(
+            GetAuthorizeAttributes<AppointmentsController>(nameof(AppointmentsController.Book)));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.BookingCreator, attribute.Policy);
+    }
+
+    [Fact]
+    public void Reading_an_appointment_requires_the_schedule_reader_policy()
+    {
+        var attribute = Assert.Single(
+            GetAuthorizeAttributes<AppointmentsController>(nameof(AppointmentsController.GetById)));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.ScheduleReader, attribute.Policy);
+    }
+
+    [Fact]
+    public void The_clinic_appointment_list_requires_the_schedule_reader_policy()
+    {
+        // The same audience as the booking grid it feeds.
+        var attribute = Assert.Single(
+            GetAuthorizeAttributes<AppointmentsController>(nameof(AppointmentsController.List)));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.ScheduleReader, attribute.Policy);
+    }
+
+    [Fact]
+    public void Reading_ones_own_bookings_requires_the_booking_holder_policy()
+    {
+        var attribute = Assert.Single(
+            GetAuthorizeAttributes<AppointmentsController>(nameof(AppointmentsController.Mine)));
+
+        Assert.Equal(AppointmentAuthorizationPolicies.BookingHolder, attribute.Policy);
+    }
+
+    [Fact]
+    public async Task A_booking_token_holds_its_own_bookings()
+    {
+        var result = await AuthorizeAsync(
+            AppointmentAuthorizationPolicies.BookingHolder,
+            new Claim(AppointmentAuthorizationPolicies.PatientIdClaim, Guid.NewGuid().ToString()));
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Receptionist")]
+    [InlineData("Doctor")]
+    [InlineData("Nurse")]
+    // A logged-in Patient role is not a booking token either: "mine" is whoever the token names.
+    [InlineData("Patient")]
+    public async Task No_role_alone_holds_a_patients_bookings(string role)
+    {
+        var result = await AuthorizeAsync(role, AppointmentAuthorizationPolicies.BookingHolder);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public void Booking_is_not_anonymous()
+    {
+        // The gateway does not authenticate. An anonymous booking endpoint would let anyone take
+        // any slot for any patient id they cared to guess.
+        Assert.NotNull(typeof(AppointmentsController).GetCustomAttribute<AuthorizeAttribute>());
+        Assert.Empty(typeof(AppointmentsController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttribute<AllowAnonymousAttribute>() is not null));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static IReadOnlyList<AuthorizeAttribute> GetAuthorizeAttributes<TController>(string methodName) =>
@@ -170,6 +280,16 @@ public sealed class AppointmentAuthorizationPolicyTests
         await using var provider = BuildProvider();
         var authorization = provider.GetRequiredService<IAuthorizationService>();
         var identity = new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "Test");
+
+        return await authorization.AuthorizeAsync(new ClaimsPrincipal(identity), resource: null, policy);
+    }
+
+    /// <summary>The role-less variant, for principals identified by a claim instead.</summary>
+    private static async Task<AuthorizationResult> AuthorizeAsync(string policy, params Claim[] claims)
+    {
+        await using var provider = BuildProvider();
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+        var identity = new ClaimsIdentity(claims, "Test");
 
         return await authorization.AuthorizeAsync(new ClaimsPrincipal(identity), resource: null, policy);
     }

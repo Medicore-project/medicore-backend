@@ -28,6 +28,21 @@ public sealed class PatientRepository : IPatientRepository, IPatientSearchReposi
             .SingleOrDefaultAsync(patient => patient.Nic == normalizedNic, cancellationToken);
     }
 
+    public Task<PatientEntity?> FindByPatientNumberAndDateOfBirthAsync(
+        string normalizedPatientNumber,
+        DateOnly dateOfBirth,
+        CancellationToken cancellationToken = default)
+    {
+        // No IgnoreQueryFilters: the global soft-delete filter is what keeps an archived patient
+        // from being identified and booked for.
+        return _dbContext.Patients
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                patient => patient.PatientNumber == normalizedPatientNumber
+                    && patient.DateOfBirth == dateOfBirth,
+                cancellationToken);
+    }
+
     public Task AddAsync(
         PatientEntity patient,
         CancellationToken cancellationToken = default)

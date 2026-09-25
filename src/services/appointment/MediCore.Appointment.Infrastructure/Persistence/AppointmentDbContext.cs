@@ -1,5 +1,6 @@
 using MediCore.Appointment.Application.Entities;
 using Microsoft.EntityFrameworkCore;
+using AppointmentEntity = MediCore.Appointment.Application.Entities.Appointment;
 
 namespace MediCore.Appointment.Infrastructure.Persistence;
 
@@ -15,6 +16,7 @@ public sealed class AppointmentDbContext : DbContext
 
     public DbSet<DoctorSchedule> DoctorSchedules => Set<DoctorSchedule>();
     public DbSet<Slot> Slots => Set<Slot>();
+    public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<DoctorLeave> DoctorLeaves => Set<DoctorLeave>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

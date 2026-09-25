@@ -10,6 +10,7 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
 {
     private const string SlotDoctorStartConstraintName = "ux_slots_doctor_start";
     private const string ProcessedMessagePrimaryKeyName = "pk_processed_messages";
+    private const string AppointmentSlotConstraintName = "ux_appointments_slot";
 
     private readonly AppointmentDbContext _dbContext;
 
@@ -35,6 +36,19 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
             // scoped context would retry them and fail again.
             _dbContext.ChangeTracker.Clear();
             throw new DuplicateSlotException(exception);
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: AppointmentSlotConstraintName
+            })
+        {
+            // Someone booked this slot between our availability check and this insert. The slot
+            // mutation and the outbox row are discarded with the appointment, which is right —
+            // nothing was committed.
+            _dbContext.ChangeTracker.Clear();
+            throw new SlotAlreadyBookedException(exception);
         }
         catch (DbUpdateException exception) when (
             exception.InnerException is PostgresException

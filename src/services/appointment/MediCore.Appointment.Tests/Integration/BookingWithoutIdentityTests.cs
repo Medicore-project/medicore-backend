@@ -47,6 +47,9 @@ public sealed class BookingWithoutIdentityTests : IClassFixture<AppointmentApiFa
     {
         // The host really has no Kafka consumer — the cache is fed only by the handler call below.
         Assert.Empty(_factory.Services.GetServices<IHostedService>().OfType<StaffEventsConsumer>());
+        // And no outbox dispatcher, so the publisher registration really does sit inside the same
+        // blank-bootstrap-servers guard. If this fails the host will not start without a broker.
+        Assert.Empty(_factory.Services.GetServices<IHostedService>().OfType<OutboxProcessor>());
 
         await PublishAsync(DoctorUpdated("Nimal Perera", isActive: true));
         var receptionist = _factory.CreateClientAs("Receptionist");

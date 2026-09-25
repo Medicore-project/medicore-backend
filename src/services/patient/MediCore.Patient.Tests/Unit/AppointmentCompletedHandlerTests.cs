@@ -202,6 +202,12 @@ public sealed class AppointmentCompletedHandlerTests
         public Task<PatientEntity?> FindByNicAsync(string normalizedNic, bool includeArchived, CancellationToken cancellationToken = default) =>
             Task.FromResult(patient);
 
+        public Task<PatientEntity?> FindByPatientNumberAndDateOfBirthAsync(
+            string normalizedPatientNumber,
+            DateOnly dateOfBirth,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only public booking identifies a patient this way.");
+
         public Task AddAsync(PatientEntity value, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<PatientEntity?> GetByIdAsync(Guid patientId, CancellationToken cancellationToken = default) =>

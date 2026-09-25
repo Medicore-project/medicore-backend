@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using FluentValidation.Results;
+using MediCore.Appointment.Api.Authorization;
+using MediCore.Appointment.Application.DTOs;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Appointment.Api.Controllers;
@@ -34,6 +36,35 @@ public abstract class AppointmentControllerBase : ControllerBase
     /// </summary>
     protected Guid? CurrentStaffId() =>
         Guid.TryParse(User.FindFirstValue("staffId"), out var staffId) ? staffId : null;
+
+    /// <summary>
+    /// The patient a booking token was minted for, from the <c>patientId</c> claim the Patient
+    /// service embeds when someone identifies themselves. A staff token never carries it. Null
+    /// means "this caller speaks for no particular patient" — never a wildcard, exactly as with
+    /// <see cref="CurrentStaffId"/>.
+    /// </summary>
+    protected Guid? CurrentBookingPatientId() =>
+        Guid.TryParse(
+            User.FindFirstValue(AppointmentAuthorizationPolicies.PatientIdClaim),
+            out var patientId)
+            ? patientId
+            : null;
+
+    /// <summary>
+    /// The number and name a booking token was minted with, for display on the appointment.
+    /// <see cref="BookingPatientDetails.None"/> for a staff token, which carries neither. Only ever
+    /// read alongside <see cref="CurrentBookingPatientId"/>, so the details and the id always come
+    /// from the same signed token.
+    /// </summary>
+    protected BookingPatientDetails CurrentBookingPatientDetails() =>
+        CurrentBookingPatientId() is null
+            ? BookingPatientDetails.None
+            : new BookingPatientDetails(
+                NullIfBlank(User.FindFirstValue(AppointmentAuthorizationPolicies.PatientNumberClaim)),
+                NullIfBlank(User.FindFirstValue(AppointmentAuthorizationPolicies.PatientNameClaim)));
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
     /// Builds a 400 from FluentValidation failures, keyed by camelCased property name so the

@@ -1,5 +1,6 @@
 using Confluent.Kafka;
 using MediCore.Patient.Application.Interfaces;
+using MediCore.Patient.Infrastructure.Auth;
 using MediCore.Patient.Infrastructure.Messaging;
 using MediCore.Patient.Infrastructure.Persistence;
 using MediCore.Patient.Infrastructure.Persistence.Repositories;
@@ -37,6 +38,7 @@ public static class DependencyInjection
         services.AddSingleton<IDemographicsCsvExporter, DemographicsCsvExporter>();
         services.AddSingleton<IDemographicsPdfExporter, DemographicsPdfExporter>();
         services.AddScoped<IUnitOfWork, PatientUnitOfWork>();
+        services.AddSingleton<IBookingTokenGenerator, BookingTokenGenerator>();
 
         QuestPDF.Settings.License = LicenseType.Community;
 
