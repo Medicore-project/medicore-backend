@@ -70,6 +70,38 @@ updates:
       - "docker"
 
   - package-ecosystem: "docker"
+    directory: "/src/services/patient"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Colombo"
+    reviewers:
+      - "bawantha0528"
+      - "chamika-kasthuri09"
+      - "tathiracs"
+      - "basidh20"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/src/services/appointment"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "Asia/Colombo"
+    reviewers:
+      - "bawantha0528"
+      - "chamika-kasthuri09"
+      - "tathiracs"
+      - "basidh20"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
     directory: "/src/gateway"
     schedule:
       interval: "weekly"

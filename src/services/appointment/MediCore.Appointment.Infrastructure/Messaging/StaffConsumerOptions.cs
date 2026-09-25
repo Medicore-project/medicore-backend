@@ -9,4 +9,7 @@ public sealed class StaffConsumerOptions
     public string Topic { get; init; } = DefaultTopic;
     public string GroupId { get; init; } = DefaultGroupId;
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);
+    public int MaxRetryAttempts { get; init; } = 5;
+    public bool EnableExponentialBackoff { get; init; } = true;
+    public TimeSpan BaseRetryDelay { get; init; } = TimeSpan.FromSeconds(2);
 }

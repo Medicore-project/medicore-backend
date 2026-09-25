@@ -9,6 +9,7 @@
 #   - CodeQL   — C# static analysis (all services)
 #   - Trivy    — container image vulnerability scan for all published images
 #   - dotnet list --vulnerable — NuGet CVE check for all .csproj files
+#   - OWASP ZAP — Baseline security scan
 # =============================================================================
 
 name: Security — Full Scan (Scheduled)
@@ -216,4 +217,61 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Image: \`${{ matrix.image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "Severities checked: HIGH, CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "Results uploaded to GitHub Security → Code Scanning" >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # OWASP ZAP — Baseline Security Scan
+  # ---------------------------------------------------------------------------
+  zap-scan:
+    name: OWASP ZAP — Baseline Scan
+    runs-on: ubuntu-latest
+    needs: [trivy-images]  # Run after Trivy completes
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup OWASP ZAP
+        uses: zaproxy/action-baseline@v0.6.1
+        with:
+          target: ${{ vars.STAGING_BASE_URL }}
+          rule_file: https://raw.githubusercontent.com/zaproxy/zaproxy/v2.12.0/zap/business-workflows/scan/policy-files/baseline.xml
+          docker_name: 'owasp/zap2docker-stable'
+          fail_action: false  # We'll handle failures ourselves via SARIF upload
+
+      - name: Generate SARIF report from ZAP output
+        if: always()
+        run: |
+          # Convert ZAP report to SARIF format for GitHub Security tab
+          # Using zaproxy/action-baseline already generates SARIF in the zap-action-sarif directory
+          if [ -d "zap-action-sarif" ]; then
+            echo "ZAP SARIF directory found"
+            ls -la zap-action-sarif/
+          else
+            echo "::warning::ZAP SARIF directory not found, checking for alternative outputs"
+            ls -la
+          fi
+
+      - name: Upload ZAP SARIF to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          # The action-baseline action puts SARIF in zap-action-sarif directory
+          sarif_file: zap-action-sarif/zap_results.sarif
+          category: zap-baseline-${{ github.run_id }}
+
+      - name: Upload ZAP artifact (SecOps evidence)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-baseline-${{ github.run_id }}
+          path: zap-action-sarif/
+          retention-days: 90
+
+      - name: Human-readable summary
+        if: always()
+        run: |
+          echo "## OWASP ZAP Baseline Scan 🔍" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Target: \`${{ vars.STAGING_BASE_URL }}\`" >> $GITHUB_STEP_SUMMARY
           echo "Results uploaded to GitHub Security → Code Scanning" >> $GITHUB_STEP_SUMMARY

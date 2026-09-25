@@ -1,4 +1,7 @@
 using MediCore.Appointment.Application.Interfaces;
+using MediCore.Appointment.Application.Entities;
+using System.Text;
+using Confluent.Kafka;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -13,16 +16,15 @@ namespace MediCore.Appointment.Infrastructure.Messaging;
 /// the same transaction as the appointment, and if the broker is unreachable the row simply stays
 /// unprocessed and is retried on the next pass (SCRUM-34 AC5).
 /// <para>
-/// Deliberately identical to the Patient and Identity processors, including the hard-coded interval
-/// and batch size and the absence of a retry cap or backoff. A permanently unpublishable message is
-/// therefore retried forever; that is a gap shared by all three services and is recorded rather than
-/// fixed here, so the three stay comparable.
+/// After MaxRetryAttempts are exceeded, the message is sent to the DLT topic (<topic>.dlt) to prevent
+/// infinite retries.
 /// </para>
 /// </remarks>
 public sealed class OutboxProcessor : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OutboxProcessor> _logger;
+    private const int MaxRetryAttempts = 5;
 
     public OutboxProcessor(IServiceScopeFactory scopeFactory, ILogger<OutboxProcessor> logger)
     {
@@ -66,6 +68,18 @@ public sealed class OutboxProcessor : BackgroundService
 
         foreach (var message in messages)
         {
+            // If max retry attempts exceeded, send to DLT instead of retrying
+            if (message.RetryCount >= MaxRetryAttempts)
+            {
+                await SendToDeadLetterTopicAsync(message, publisher, cancellationToken);
+                message.ProcessedOnUtc = DateTime.UtcNow; // Mark as processed to prevent infinite retries
+                message.Error = "Max retry attempts exceeded, sent to DLT";
+                _logger.LogWarning(
+                    "Appointment outbox message {OutboxMessageId} exceeded max retry attempts. Sent to DLT.",
+                    message.Id);
+                continue;
+            }
+
             try
             {
                 await publisher.PublishAsync(message, cancellationToken);
@@ -92,5 +106,35 @@ public sealed class OutboxProcessor : BackgroundService
         {
             await repository.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private async Task SendToDeadLetterTopicAsync(
+        OutboxMessage message,
+        IKafkaEventPublisher publisher,
+        CancellationToken cancellationToken)
+    {
+        var dltTopic = $"{message.Topic}.dlt";
+
+        // Create headers similar to KafkaEventPublisher but add DLT-specific info
+        var headers = new Headers
+        {
+            new Header("message-id", Encoding.UTF8.GetBytes(message.Id.ToString())),
+            new Header("correlation-id", Encoding.UTF8.GetBytes(message.CorrelationId)),
+            new Header("occurred-at-utc", Encoding.UTF8.GetBytes(message.OccurredOnUtc.ToString("O"))),
+            new Header("event-type", Encoding.UTF8.GetBytes(message.EventType)),
+            new Header("version", Encoding.UTF8.GetBytes(message.EventVersion.ToString())),
+            new Header("original-topic", Encoding.UTF8.GetBytes(message.Topic)),
+            new Header("retry-count", Encoding.UTF8.GetBytes(message.RetryCount.ToString())),
+            new Header("dlT-reason", Encoding.UTF8.GetBytes("Max retry attempts exceeded"))
+        };
+
+        var kafkaMessage = new Message<string, string>
+        {
+            Key = message.EventKey,
+            Value = message.Payload,
+            Headers = headers
+        };
+
+        await producer.ProduceAsync(dltTopic, kafkaMessage, cancellationToken);
     }
 }

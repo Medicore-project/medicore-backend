@@ -1,0 +1,349 @@
+# =============================================================================
+# ci-appointment.yml — MediCore Appointment Service CI/CD
+# =============================================================================
+# Triggers ONLY when Appointment-related paths change (path filtering proves
+# independent deployability — a Billing change never rebuilds Appointment).
+#
+# Jobs:
+#   1. build-and-test   — restore → build → test → upload coverage
+#   2. security-scan    — Gitleaks + CodeQL + dotnet vulnerable packages
+#   3. docker-publish   — multi-stage build, push to GHCR
+#   4. deploy-azure     — deploy to Azure App Service (main branch only) [COMMENTED OUT FOR NOW]
+# =============================================================================
+
+name: CI — Appointment Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/services/appointment/**"
+      - "src/shared/**"
+      - ".github/workflows/ci-appointment.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/services/appointment/**"
+      - "src/shared/**"
+      - ".github/workflows/ci-appointment.yml"
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  IMAGE_NAME: ghcr.io/medicore-project/medicore-appointment
+  WORKING_DIR: src/services/appointment
+
+permissions:
+  contents: read
+  packages: write          # push to GHCR
+  security-events: write   # CodeQL results
+  actions: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build & Test
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for Gitleaks
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore NuGet packages
+        run: dotnet restore src/services/appointment/MediCore.Appointment.Api/Api.csproj
+
+      - name: Build (Release)
+        run: |
+          dotnet build src/services/appointment/MediCore.Appointment.Api/Api.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Run Tests with Coverage
+        run: |
+          dotnet test src/services/appointment/MediCore.Appointment.Tests/Tests.csproj \
+            --configuration Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            --logger "trx;LogFileName=appointment-tests.trx"
+        continue-on-error: false
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: appointment-test-results-${{ github.sha }}
+          path: |
+            coverage/**/*.xml
+            coverage/**/*.trx
+          retention-days: 30
+
+      - name: Upload Coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/**/coverage.cobertura.xml
+          flags: appointment
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Security Scanning
+  # ---------------------------------------------------------------------------
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2a. Gitleaks — scan full git history for leaked secrets
+      - name: Gitleaks — Secret Scan
+        run: docker run -v ${{ github.workspace }}:/path zricethezav/gitleaks:latest detect --source="/path" -v
+
+      # 2b. CodeQL — static analysis for C#
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          queries: security-and-quality
+
+      - name: Setup .NET for CodeQL
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build for CodeQL analysis
+        run: |
+          dotnet restore src/services/appointment/MediCore.Appointment.Api/Api.csproj
+          dotnet build src/services/appointment/MediCore.Appointment.Api/Api.csproj \
+            --configuration Release --no-restore
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:csharp/appointment"
+
+      # 2c. dotnet list package --vulnerable — known CVEs in NuGet packages
+      - name: Setup .NET for vulnerability audit
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: NuGet Vulnerability Audit
+        id: nuget-audit
+        run: |
+          echo "## NuGet Vulnerability Report — Appointment" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          dotnet restore src/services/appointment/MediCore.Appointment.Api/Api.csproj
+
+          dotnet list src/services/appointment/MediCore.Appointment.Api/Api.csproj package \
+            --vulnerable --include-transitive 2>&1 | tee /tmp/nuget-audit-appointment.txt
+
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/nuget-audit-appointment.txt >> $GITHUB_STEP_SUMMARY
+
+          # Fail if HIGH or CRITICAL vulnerabilities found
+          if grep -qiE "(High|Critical)" /tmp/nuget-audit-appointment.txt; then
+            echo "::error::High or Critical NuGet vulnerabilities found. See summary."
+            exit 1
+          fi
+
+      - name: Upload Security Scan Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-scan-appointment-${{ github.sha }}
+          path: /tmp/nuget-audit-appointment.txt
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Docker Build & Push to GHCR
+  # ---------------------------------------------------------------------------
+  docker-publish:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    if: github.event_name == 'push'   # don't push images on PR builds
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.push.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          labels: |
+            org.opencontainers.image.title=MediCore Appointment Service
+            org.opencontainers.image.description=Doctor scheduling and appointment booking microservice
+            org.opencontainers.image.vendor=MediCore Team
+
+      - name: Build and Push Docker image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/services/appointment/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          artifact-name: appointment-sbom-${{ github.sha }}.spdx.json
+          output-file: /tmp/appointment-sbom.spdx.json
+          continue-on-error: true
+
+      - name: Run Trivy vulnerability scan on built image
+        uses: aquasecurity/trivy-action@master
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          format: "sarif"
+          output: "trivy-appointment.sarif"
+          severity: "HIGH,CRITICAL"
+          exit-code: "0"   # warn but don't fail (zero-day grace period)
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-appointment.sarif
+          category: trivy-appointment
+
+      - name: Upload Trivy results artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-appointment-${{ github.sha }}
+          path: trivy-appointment.sarif
+          retention-days: 90
+
+      -name: Image summary
+        run: |
+          echo "## Docker Image Published 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry | ghcr.io |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| SHA tag | \`sha-${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Digest | \`${{ steps.push.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy to Azure App Service (main branch only)
+  # ---------------------------------------------------------------------------
+  # Commented out for now - deployment will be added at end of sprint
+  # deploy-azure:
+  #   name: Deploy to Azure
+  #   runs-on: ubuntu-latest
+  #   needs: docker-publish
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   environment:
+  #     name: production
+  #     url: https://medicore-appointment.azurewebsites.net
+  #
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup .NET
+  #       uses: actions/setup-dotnet@v6
+  #       with:
+  #         dotnet-version: '8.0.x'
+  #
+  #     - name: Install PostgreSQL Client
+  #       run: sudo apt-get update && sudo apt-get install -y postgresql-client
+  #
+  #     # Idempotent — IF NOT EXISTS guards prevent errors on re-runs
+  #     - name: Initialize Database Schemas and Roles
+  #       continue-on-error: true
+  #       run: |
+  #         CONN=$(echo '${{ secrets.AZURE_DB_ADMIN_CONN }}' | tr -d '[:space:]')
+  #         psql "$CONN" -f infra/postgres/init/01-init-db.sql
+  #         echo "DB init step completed (errors above are safe if schemas already exist)"
+  #
+  #     - name: Deploy container to Azure App Service
+  #       uses: azure/webapps-deploy@v3
+  #       with:
+  #         app-name: ${{ secrets.AZURE_APPOINTMENT_NAME }}
+  #         publish-profile: ${{ secrets.AZURE_APPOINTMENT_PUBLISH_PROFILE }}
+  #         images: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+  #
+  #     - name: Wait for deployment and health check
+  #       run: |
+  #         APP_URL="https://${{ secrets.AZURE_APPOINTMENT_NAME }}.azurewebsites.net"
+  #         echo "Waiting for $APP_URL to become healthy..."
+  #
+  #         for i in {1..12}; do
+  #           STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health/live" || echo "000")
+  #           echo "Attempt $i: HTTP $STATUS"
+  #           if [ "$STATUS" = "200" ]; then
+  #             echo "✅ Deployment healthy!"
+  #             break
+  #           fi
+  #           if [ $i -eq 12 ]; then
+  #             echo "::error::Deployment health check failed after 60 seconds"
+  #             exit 1
+  #           fi
+  #           sleep 5
+  #         done
+  #
+  #     - name: Deployment summary
+  #       run: |
+  #         echo "## Appointment Service Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
+  #         echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+  #         echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+  #         echo "| Environment | Production |" >> $GITHUB_STEP_SUMMARY
+  #         echo "| URL | https://${{ secrets.AZURE_APPOINTMENT_NAME }}.azurewebsites.net |" >> $GITHUB_STEP_SUMMARY
+  #         echo "| Image | \`${{ env.IMAGE_NAME }}:sha-${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+  #         echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+  #         echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+  #
+  #     - name: Azure logout
+  #       if: always()
+  #       run: az logout || true
