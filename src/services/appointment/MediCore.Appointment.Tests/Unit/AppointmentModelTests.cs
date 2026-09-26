@@ -111,6 +111,39 @@ public sealed class AppointmentModelTests
         Assert.Equal(256, name.GetMaxLength());
     }
 
+    [Fact]
+    public void The_slot_row_carries_an_optimistic_concurrency_token_mapped_to_xmin()
+    {
+        // SCRUM-35. The database changes xmin on every write, so a writer whose read of the slot
+        // has gone stale matches no row and loses — without any writer having to bump a counter.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(Slot))!;
+
+        var version = entityType.FindProperty("Version");
+
+        Assert.NotNull(version);
+        Assert.True(version.IsShadowProperty());
+        Assert.True(version.IsConcurrencyToken);
+        Assert.Equal(typeof(uint), version.ClrType);
+        Assert.Equal(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate, version.ValueGenerated);
+        Assert.Equal("xmin", version.GetColumnName());
+    }
+
+    [Fact]
+    public void Only_the_slot_carries_a_concurrency_token()
+    {
+        // Appointments are guarded by ux_appointments_slot instead. A token on them would turn a
+        // harmless concurrent status read into a conflict for no gain.
+        using var context = CreateContext();
+
+        var tokenOwners = context.Model.GetEntityTypes()
+            .Where(type => type.GetProperties().Any(property => property.IsConcurrencyToken))
+            .Select(type => type.ClrType)
+            .ToList();
+
+        Assert.Equal([typeof(Slot)], tokenOwners);
+    }
+
     [Theory]
     [InlineData(ServiceCodes.GeneralConsultation)]
     [InlineData(ServiceCodes.SpecialistConsultation)]

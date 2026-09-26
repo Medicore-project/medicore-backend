@@ -109,6 +109,9 @@ public sealed class AppointmentQueryServiceTests
 
         public (Guid? DoctorId, DateOnly From, DateOnly To)? LastListQuery { get; private set; }
 
+        public Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Reading never locks.");
+
         public (Guid PatientId, DateTime NowUtc, int Limit)? LastUpcomingQuery { get; private set; }
 
         public Task<IReadOnlyList<AppointmentListing>> ListAsync(

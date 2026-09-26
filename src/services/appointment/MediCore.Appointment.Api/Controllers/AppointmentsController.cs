@@ -136,6 +136,11 @@ public sealed class AppointmentsController : AppointmentControllerBase
     /// identify or public-register endpoint. When a booking token is used the patient comes from
     /// its <c>patientId</c> claim and <strong>any patientId in the body is ignored</strong>, so the
     /// token can only ever book for the one patient it names.
+    /// <para>
+    /// Safe under concurrency (SCRUM-35): when several requests book the same slot at once, exactly
+    /// one gets 201 and every other gets 409 with a message saying why, and a losing request leaves
+    /// no appointment, slot change or event behind.
+    /// </para>
     /// </remarks>
     [HttpPost]
     [Authorize(Policy = AppointmentAuthorizationPolicies.BookingCreator)]
@@ -206,6 +211,8 @@ public sealed class AppointmentsController : AppointmentControllerBase
             BookingPatientOverlapResult overlap => ConflictProblem(DescribeClash(overlap)),
             BookingSlotTakenResult => ConflictProblem(
                 "Someone booked this slot a moment ago. Please choose another."),
+            BookingContendedResult => ConflictProblem(
+                "Several people are trying to book this slot right now. Please choose it again or pick another."),
             _ => throw new InvalidOperationException("Unknown booking result.")
         };
     }

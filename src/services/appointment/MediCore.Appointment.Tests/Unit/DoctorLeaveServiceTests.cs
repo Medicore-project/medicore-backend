@@ -335,6 +335,13 @@ public sealed class DoctorLeaveServiceTests
             SaveCount++;
             return Task.CompletedTask;
         }
+
+        // These services never open an explicit transaction; running the work directly keeps the
+        // fake honest about that without pretending to roll anything back.
+        public Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> work,
+            CancellationToken cancellationToken = default) =>
+            work(cancellationToken);
     }
 
     private sealed class FixedTimeProvider : TimeProvider

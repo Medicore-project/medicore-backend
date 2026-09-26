@@ -61,5 +61,51 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
             _dbContext.ChangeTracker.Clear();
             throw new DuplicateProcessedMessageException(exception);
         }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            // A slot's xmin no longer matched what we read: another writer committed first. The
+            // transaction rolled back, so nothing of ours is saved. Clearing the tracker means a
+            // caller that retries re-reads the slot from the database instead of reusing the
+            // stale copy.
+            _dbContext.ChangeTracker.Clear();
+            throw new ConcurrentUpdateException(exception);
+        }
     }
+
+    public async Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        CancellationToken cancellationToken = default)
+    {
+        // Read committed, Postgres's default. Serializable would also close the patient-overlap
+        // race, but by aborting whole transactions under load; the explicit patient lock taken
+        // inside `work` closes it by waiting instead, and the slot's token covers the slot row.
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            var result = await work(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        }
+        catch (Exception exception) when (IsTransientConflict(exception))
+        {
+            // Postgres chose this transaction as the one to abort. Nothing committed; running the
+            // whole operation again is the documented remedy.
+            _dbContext.ChangeTracker.Clear();
+            throw new ConcurrentUpdateException(exception);
+        }
+        catch
+        {
+            // Disposing the uncommitted transaction rolls it back. Anything still tracked belongs
+            // to that rolled-back attempt and must not leak into a retry.
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    internal static bool IsTransientConflict(Exception exception) =>
+        (exception as PostgresException ?? exception.InnerException as PostgresException) is
+        {
+            SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure
+        };
 }

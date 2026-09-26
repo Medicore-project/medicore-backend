@@ -1,3 +1,4 @@
+using MediCore.Appointment.Application.Concurrency;
 using MediCore.Appointment.Application.Entities;
 using MediCore.Appointment.Application.Interfaces;
 using MediCore.Appointment.Application.Scheduling;
@@ -41,10 +42,33 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
     }
 
     /// <inheritdoc />
-    public async Task<SlotReconciliationSummary> ReconcileDoctorAsync(
+    /// <remarks>
+    /// SCRUM-35: re-run whole if a slot changed under it — most often a booking between the read
+    /// and the save. Reconciliation is idempotent (SCRUM-32 AC5), so the re-run simply re-reads,
+    /// sees the slot as Booked and flags it instead of deleting it. Every caller has committed its
+    /// own change before calling, so the cleared change tracker loses nothing of theirs.
+    /// </remarks>
+    public Task<SlotReconciliationSummary> ReconcileDoctorAsync(
         Guid doctorId,
         string flagReason,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(
+            token => ReconcileDoctorOnceAsync(doctorId, flagReason, token),
+            cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>Retried as a whole for the same reason as <see cref="ReconcileDoctorAsync"/>.</remarks>
+    public Task<SlotReconciliationSummary> ReconcileAllDoctorsAsync(
+        string flagReason,
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(
+            token => ReconcileAllDoctorsOnceAsync(flagReason, token),
+            cancellationToken);
+
+    private async Task<SlotReconciliationSummary> ReconcileDoctorOnceAsync(
+        Guid doctorId,
+        string flagReason,
+        CancellationToken cancellationToken)
     {
         var (from, to) = _slotGenerator.CurrentHorizon();
 
@@ -60,10 +84,9 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
         return summary;
     }
 
-    /// <inheritdoc />
-    public async Task<SlotReconciliationSummary> ReconcileAllDoctorsAsync(
+    private async Task<SlotReconciliationSummary> ReconcileAllDoctorsOnceAsync(
         string flagReason,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var (from, to) = _slotGenerator.CurrentHorizon();
         var holidays = await _holidayRepository.GetBetweenAsync(from, to, cancellationToken);

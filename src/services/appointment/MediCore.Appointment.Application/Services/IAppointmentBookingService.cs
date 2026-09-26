@@ -45,6 +45,13 @@ public sealed record BookingPatientOverlapResult(
 /// </summary>
 public sealed record BookingSlotTakenResult : BookingResult;
 
+/// <summary>
+/// SCRUM-35. Every attempt lost a concurrency race on the slot and the retries ran out, so the
+/// service cannot say what the slot's state will settle at. The controller maps this to 409 and
+/// asks the caller to choose again — never a 500, and never a guess that it was booked.
+/// </summary>
+public sealed record BookingContendedResult : BookingResult;
+
 // ── Service contract ──────────────────────────────────────────────────────────
 
 /// <summary>Booking a generated slot for a patient.</summary>

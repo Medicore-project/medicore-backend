@@ -1,3 +1,4 @@
+using MediCore.Appointment.Application.Concurrency;
 using MediCore.Appointment.Application.DTOs;
 using MediCore.Appointment.Application.Entities;
 using MediCore.Appointment.Application.Interfaces;
@@ -62,11 +63,31 @@ public sealed class SlotService : ISlotService
         return slots.Select(ToResponse).ToList();
     }
 
-    public async Task<SlotBlockResult> BlockAsync(
+    // SCRUM-35: blocking and unblocking race a booking for the same slot row. The slot's
+    // concurrency token makes the later save lose; the retry then re-reads the slot and answers
+    // from what it is now — typically "not available; it is Booked" — rather than overwriting it.
+    public Task<SlotBlockResult> BlockAsync(
         Guid slotId,
         BlockSlotRequest request,
         string actor,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(
+            token => BlockOnceAsync(slotId, request, actor, token),
+            cancellationToken);
+
+    public Task<SlotUnblockResult> UnblockAsync(
+        Guid slotId,
+        string actor,
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(
+            token => UnblockOnceAsync(slotId, actor, token),
+            cancellationToken);
+
+    private async Task<SlotBlockResult> BlockOnceAsync(
+        Guid slotId,
+        BlockSlotRequest request,
+        string actor,
+        CancellationToken cancellationToken)
     {
         var slot = await _repository.GetTrackedBySlotIdAsync(slotId, cancellationToken);
 
@@ -93,10 +114,10 @@ public sealed class SlotService : ISlotService
         return new SlotBlockedResult(ToResponse(slot));
     }
 
-    public async Task<SlotUnblockResult> UnblockAsync(
+    private async Task<SlotUnblockResult> UnblockOnceAsync(
         Guid slotId,
         string actor,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var slot = await _repository.GetTrackedBySlotIdAsync(slotId, cancellationToken);
 

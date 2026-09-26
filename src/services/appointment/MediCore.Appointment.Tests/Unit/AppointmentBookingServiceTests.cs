@@ -307,6 +307,126 @@ public sealed class AppointmentBookingServiceTests
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
     }
 
+    // ── SCRUM-35: transaction, patient lock and retry ────────────────────────
+
+    [Fact]
+    public async Task Losing_to_the_index_rolls_the_attempt_back_and_leaves_nothing()
+    {
+        var fixture = new Fixture(FreeSlot());
+        fixture.UnitOfWork.Throw = new SlotAlreadyBookedException();
+
+        await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.Equal(1, fixture.UnitOfWork.Transactions);
+        Assert.Equal(0, fixture.UnitOfWork.Commits);
+        Assert.Empty(fixture.Appointments.Added);
+        Assert.Empty(fixture.Outbox.Added);
+    }
+
+    [Fact]
+    public async Task Losing_the_slot_token_race_rereads_the_slot_and_reports_it_taken()
+    {
+        // Both racers read Available; the other one committed first, so our save matched no row.
+        // The retry reads the slot as the winner left it.
+        var fixture = new Fixture(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(SlotIn(SlotStatus.Booked));
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        // In the words of the race, not "it is Booked": this caller did not book it.
+        Assert.IsType<BookingSlotTakenResult>(result);
+        Assert.Equal(2, fixture.UnitOfWork.Transactions);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+        Assert.Empty(fixture.Appointments.Added);
+        Assert.Empty(fixture.Outbox.Added);
+    }
+
+    [Fact]
+    public async Task A_retry_that_finds_the_slot_blocked_names_the_block()
+    {
+        // Not every lost race is a booking: an admin can block the slot in between. Rewording
+        // that as "someone booked it" would be false.
+        var fixture = new Fixture(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(SlotIn(SlotStatus.Blocked));
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        var refused = Assert.IsType<BookingSlotNotAvailableResult>(result);
+        Assert.Equal(SlotStatus.Blocked, refused.CurrentStatus);
+    }
+
+    [Fact]
+    public async Task A_retry_books_the_slot_when_it_is_still_free()
+    {
+        // The row changed but the slot is still Available: retrying is what lets this caller win
+        // instead of being turned away by a race that did not actually take the slot.
+        var fixture = new Fixture(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(FreeSlot());
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        var created = Assert.IsType<BookingCreatedResult>(result);
+        // Exactly one appointment and one event, from the attempt that committed.
+        var appointment = Assert.Single(fixture.Appointments.Added);
+        Assert.Equal(created.Appointment.AppointmentId, appointment.AppointmentId);
+        Assert.Single(fixture.Outbox.Added);
+        Assert.Equal(1, fixture.UnitOfWork.Commits);
+        Assert.Equal(2, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Three_lost_races_in_a_row_end_in_a_conflict_not_an_error()
+    {
+        var fixture = new Fixture(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(FreeSlot());
+        fixture.UnitOfWork.Throw = new ConcurrentUpdateException();
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.IsType<BookingContendedResult>(result);
+        Assert.Equal(3, fixture.UnitOfWork.Transactions);
+        Assert.Equal(0, fixture.UnitOfWork.Commits);
+        Assert.Empty(fixture.Appointments.Added);
+        Assert.Empty(fixture.Outbox.Added);
+    }
+
+    [Fact]
+    public async Task The_patient_is_locked_first_inside_the_transaction_before_anything_is_read()
+    {
+        // The lock only serializes the overlap check if it is held before the check reads and
+        // until the booking commits.
+        var fixture = new Fixture(FreeSlot());
+
+        await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.Equal(
+            ["begin", $"lock {PatientId}", "read slot", "check overlap", "save", "commit"],
+            fixture.Log);
+    }
+
+    [Fact]
+    public async Task Every_attempt_takes_the_lock_again_in_its_own_transaction()
+    {
+        // The lock is transaction-scoped, so the rollback released it; a retry that skipped it
+        // would check for overlaps unprotected.
+        var fixture = new Fixture(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(FreeSlot());
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.Equal(
+            [
+                "begin", $"lock {PatientId}", "read slot", "check overlap", "save", "rollback",
+                "begin", $"lock {PatientId}", "read slot", "check overlap", "save", "commit"
+            ],
+            fixture.Log);
+    }
+
     [Fact]
     public async Task The_status_check_comes_before_the_time_check()
     {
@@ -364,6 +484,13 @@ public sealed class AppointmentBookingServiceTests
         Status = SlotStatus.Available
     };
 
+    private static Slot SlotIn(string status)
+    {
+        var slot = FreeSlot();
+        slot.Status = status;
+        return slot;
+    }
+
     private static AppointmentEntity BookedAppointment(DateTime startUtc, DateTime endUtc) => new()
     {
         SlotId = Guid.NewGuid(),
@@ -384,11 +511,22 @@ public sealed class AppointmentBookingServiceTests
             Appointments = new FakeAppointmentRepository(existing);
             Doctors = new FakeDoctorCacheRepository();
             Outbox = new FakeOutboxMessageRepository();
-            UnitOfWork = new FakeUnitOfWork();
+            // A rolled-back attempt leaves nothing: what it staged disappears, as it would from
+            // the database.
+            UnitOfWork = new FakeUnitOfWork(Log, onRollback: () =>
+            {
+                Appointments.Added.Clear();
+                Outbox.Added.Clear();
+            });
+            Slots.Log = Log;
+            Appointments.Log = Log;
 
             Service = new AppointmentBookingService(
                 Appointments, Slots, Doctors, Outbox, UnitOfWork, new FixedTimeProvider(Now));
         }
+
+        /// <summary>Every step of every attempt, in order, across the fakes.</summary>
+        public List<string> Log { get; } = [];
 
         public FakeSlotRepository Slots { get; }
 
@@ -410,10 +548,26 @@ public sealed class AppointmentBookingServiceTests
             Slot = slot;
         }
 
+        /// <summary>What the first read returns.</summary>
         public Slot? Slot { get; }
 
-        public Task<Slot?> GetTrackedBySlotIdAsync(Guid slotId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Slot?.SlotId == slotId ? Slot : null);
+        /// <summary>
+        /// What each later read returns, in turn: the slot as another writer left it. The real
+        /// unit of work clears the tracker on a lost race, so a retry reads a fresh entity rather
+        /// than the one the failed attempt already changed.
+        /// </summary>
+        public Queue<Slot> Rereads { get; } = new();
+
+        public List<string>? Log { get; set; }
+
+        private int _reads;
+
+        public Task<Slot?> GetTrackedBySlotIdAsync(Guid slotId, CancellationToken cancellationToken = default)
+        {
+            Log?.Add("read slot");
+            var slot = _reads++ > 0 && Rereads.TryDequeue(out var reread) ? reread : Slot;
+            return Task.FromResult(slot?.SlotId == slotId ? slot : null);
+        }
 
         public Task<IReadOnlyList<Slot>> GetTrackedForDoctorBetweenAsync(
             Guid doctorId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default) =>
@@ -446,9 +600,17 @@ public sealed class AppointmentBookingServiceTests
 
         public List<AppointmentEntity> Added { get; } = [];
 
+        public List<string>? Log { get; set; }
+
         public Task AddAsync(AppointmentEntity appointment, CancellationToken cancellationToken = default)
         {
             Added.Add(appointment);
+            return Task.CompletedTask;
+        }
+
+        public Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default)
+        {
+            Log?.Add($"lock {patientId}");
             return Task.CompletedTask;
         }
 
@@ -456,8 +618,10 @@ public sealed class AppointmentBookingServiceTests
         // here rather than assumed.
         public Task<AppointmentEntity?> FindPatientOverlapAsync(
             Guid patientId, DateTime startUtc, DateTime endUtc,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_existing
+            CancellationToken cancellationToken = default)
+        {
+            Log?.Add("check overlap");
+            return Task.FromResult(_existing
                 .Where(appointment =>
                     appointment.PatientId == patientId
                     && appointment.Status == AppointmentStatus.Booked
@@ -465,6 +629,7 @@ public sealed class AppointmentBookingServiceTests
                     && appointment.EndUtc > startUtc)
                 .OrderBy(appointment => appointment.StartUtc)
                 .FirstOrDefault());
+        }
 
         public Task<AppointmentEntity?> GetByAppointmentIdAsync(
             Guid appointmentId, CancellationToken cancellationToken = default) =>
@@ -526,14 +691,56 @@ public sealed class AppointmentBookingServiceTests
 
     private sealed class FakeUnitOfWork : IUnitOfWork
     {
+        private readonly List<string> _log;
+        private readonly Action _onRollback;
+
+        public FakeUnitOfWork(List<string> log, Action onRollback)
+        {
+            _log = log;
+            _onRollback = onRollback;
+        }
+
         public int SaveCount { get; private set; }
 
+        public int Transactions { get; private set; }
+
+        public int Commits { get; private set; }
+
+        /// <summary>Thrown by every save. <see cref="Outcomes"/> takes precedence while it lasts.</summary>
         public Exception? Throw { get; set; }
+
+        /// <summary>What each save does in turn; a null entry means that save succeeds.</summary>
+        public Queue<Exception?> Outcomes { get; } = new();
 
         public Task SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             SaveCount++;
-            return Throw is null ? Task.CompletedTask : Task.FromException(Throw);
+            _log.Add("save");
+
+            var outcome = Outcomes.TryDequeue(out var next) ? next : Throw;
+            return outcome is null ? Task.CompletedTask : Task.FromException(outcome);
+        }
+
+        public async Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> work,
+            CancellationToken cancellationToken = default)
+        {
+            Transactions++;
+            _log.Add("begin");
+
+            try
+            {
+                var result = await work(cancellationToken);
+                Commits++;
+                _log.Add("commit");
+                return result;
+            }
+            catch
+            {
+                _log.Add("rollback");
+                _onRollback();
+                throw;
+            }
         }
     }
 
