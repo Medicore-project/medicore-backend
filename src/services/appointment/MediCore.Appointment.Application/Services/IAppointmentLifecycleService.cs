@@ -41,6 +41,39 @@ public sealed record AppointmentInsideCancellationWindowResult(int WindowHours, 
 /// <summary>Three attempts in a row lost a race on the slot row; the caller is asked to try again.</summary>
 public sealed record AppointmentContendedResult : AppointmentChangeResult;
 
+/// <summary>The slot a reschedule asked for does not exist.</summary>
+public sealed record AppointmentNewSlotNotFoundResult : AppointmentChangeResult;
+
+/// <summary>The slot a reschedule asked for is the one the appointment already has.</summary>
+public sealed record AppointmentNewSlotSameAsCurrentResult : AppointmentChangeResult;
+
+/// <summary>
+/// The slot a reschedule asked for belongs to a different doctor. Rescheduling moves the time, not
+/// the doctor; changing doctor is a cancellation and a new booking.
+/// </summary>
+public sealed record AppointmentNewSlotDifferentDoctorResult : AppointmentChangeResult;
+
+/// <summary>The appointment's doctor is no longer bookable, so nothing can be moved to them.</summary>
+public sealed record AppointmentDoctorNotFoundResult : AppointmentChangeResult;
+
+/// <summary>The slot a reschedule asked for is not <c>Available</c>.</summary>
+public sealed record AppointmentNewSlotNotAvailableResult(string CurrentStatus) : AppointmentChangeResult;
+
+/// <summary>The slot a reschedule asked for has already started.</summary>
+public sealed record AppointmentNewSlotInPastResult(DateTime StartUtc) : AppointmentChangeResult;
+
+/// <summary>The patient has another booked appointment overlapping the new time.</summary>
+public sealed record AppointmentPatientOverlapResult(
+    Guid ExistingAppointmentId,
+    DateTime ExistingStartUtc,
+    DateTime ExistingEndUtc) : AppointmentChangeResult;
+
+/// <summary>
+/// Someone else booked the slot a reschedule asked for while it was in flight. The reschedule
+/// rolled back, so the appointment is still on its original slot.
+/// </summary>
+public sealed record AppointmentSlotTakenResult : AppointmentChangeResult;
+
 /// <summary>Reschedules, cancels and completes existing appointments.</summary>
 /// <remarks>
 /// Separate from <see cref="IAppointmentBookingService"/>, which only ever creates. Each change
@@ -58,5 +91,20 @@ public interface IAppointmentLifecycleService
         string reason,
         AppointmentCaller caller,
         string correlationId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Moves a booked appointment to another available slot with the same doctor, releasing the
+    /// old slot and taking the new one in a single transaction. If the new slot is taken while the
+    /// request is in flight, nothing changes and the appointment stays where it was.
+    /// </summary>
+    /// <remarks>
+    /// Bound by the cancellation window like cancelling, except for a stranded booking — one whose
+    /// slot a schedule change has flagged — which the clinic caused and can always move.
+    /// </remarks>
+    Task<AppointmentChangeResult> RescheduleAsync(
+        Guid appointmentId,
+        Guid newSlotId,
+        AppointmentCaller caller,
         CancellationToken cancellationToken = default);
 }

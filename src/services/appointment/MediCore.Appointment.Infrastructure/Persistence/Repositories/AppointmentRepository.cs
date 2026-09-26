@@ -50,6 +50,7 @@ public sealed class AppointmentRepository : IAppointmentRepository
         Guid patientId,
         DateTime startUtc,
         DateTime endUtc,
+        Guid? excludeAppointmentId = null,
         CancellationToken cancellationToken = default)
     {
         // Half-open intervals: strict comparisons on both sides, so an appointment ending exactly
@@ -61,7 +62,8 @@ public sealed class AppointmentRepository : IAppointmentRepository
                 appointment.PatientId == patientId
                 && appointment.Status == AppointmentStatus.Booked
                 && appointment.StartUtc < endUtc
-                && appointment.EndUtc > startUtc)
+                && appointment.EndUtc > startUtc
+                && appointment.AppointmentId != excludeAppointmentId)
             .OrderBy(appointment => appointment.StartUtc)
             .FirstOrDefaultAsync(cancellationToken);
     }

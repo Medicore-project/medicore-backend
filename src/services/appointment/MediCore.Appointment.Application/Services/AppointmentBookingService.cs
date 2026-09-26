@@ -155,7 +155,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
 
         // SCRUM-34 AC3. Last of the reads because it is the only one that scans a second table.
         var clash = await _appointmentRepository.FindPatientOverlapAsync(
-            patientId, slot.StartUtc, slot.EndUtc, cancellationToken);
+            patientId, slot.StartUtc, slot.EndUtc, cancellationToken: cancellationToken);
 
         if (clash is not null)
         {

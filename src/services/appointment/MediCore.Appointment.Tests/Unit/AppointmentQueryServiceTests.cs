@@ -191,7 +191,8 @@ public sealed class AppointmentQueryServiceTests
             throw new NotSupportedException("Queries never lock.");
 
         public Task<AppointmentEntity?> FindPatientOverlapAsync(
-            Guid patientId, DateTime startUtc, DateTime endUtc, CancellationToken cancellationToken = default) =>
+            Guid patientId, DateTime startUtc, DateTime endUtc, Guid? excludeAppointmentId = null,
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Queries never check overlaps.");
 
         public Task<AppointmentEntity?> GetByAppointmentIdAsync(

@@ -220,6 +220,13 @@ public sealed class AppointmentChangesControllerTests
 
         public List<(Guid AppointmentId, string Reason, AppointmentCaller Caller)> Cancels { get; } = [];
 
+        public Task<AppointmentChangeResult> RescheduleAsync(
+            Guid appointmentId,
+            Guid newSlotId,
+            AppointmentCaller caller,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("No route reschedules yet.");
+
         public Task<AppointmentChangeResult> CancelAsync(
             Guid appointmentId,
             string reason,

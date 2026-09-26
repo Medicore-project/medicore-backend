@@ -658,7 +658,7 @@ public sealed class AppointmentBookingServiceTests
         // The half-open comparison the real repository makes, so the interval rules are exercised
         // here rather than assumed.
         public Task<AppointmentEntity?> FindPatientOverlapAsync(
-            Guid patientId, DateTime startUtc, DateTime endUtc,
+            Guid patientId, DateTime startUtc, DateTime endUtc, Guid? excludeAppointmentId = null,
             CancellationToken cancellationToken = default)
         {
             Log?.Add("check overlap");

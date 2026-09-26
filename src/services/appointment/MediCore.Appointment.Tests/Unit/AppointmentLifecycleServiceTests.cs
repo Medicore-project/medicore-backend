@@ -17,6 +17,8 @@ public sealed class AppointmentLifecycleServiceTests
     private static readonly Guid OtherPatientId = Guid.Parse("2222222a-2222-2222-2222-222222222222");
     private static readonly Guid SlotId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid AppointmentId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid NewSlotId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+    private static readonly Guid OtherDoctorId = Guid.Parse("1111111a-1111-1111-1111-111111111111");
 
     private static readonly DateTime Now = new(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc);
 
@@ -318,7 +320,360 @@ public sealed class AppointmentLifecycleServiceTests
         Assert.Empty(fixture.Outbox.Added);
     }
 
+    // ── Reschedule: the atomic slot swap (AC1) ───────────────────────────────
+
+    [Fact]
+    public async Task Rescheduling_moves_the_appointment_and_swaps_the_slots_in_one_transaction()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        var changed = Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal(NewSlotId, changed.Appointment.SlotId);
+
+        Assert.Equal(NewSlotId, fixture.Appointment.SlotId);
+        Assert.Equal(fixture.NewSlot.StartUtc, fixture.Appointment.StartUtc);
+        Assert.Equal(fixture.NewSlot.EndUtc, fixture.Appointment.EndUtc);
+        Assert.Equal(fixture.NewSlot.SlotDate, fixture.Appointment.SlotDate);
+        Assert.Equal(AppointmentStatus.Booked, fixture.Appointment.Status);
+        Assert.Equal("desk@medicore.test", fixture.Appointment.UpdatedBy);
+
+        Assert.Equal(SlotStatus.Available, fixture.Slot.Status);
+        Assert.Equal(SlotStatus.Booked, fixture.NewSlot.Status);
+        Assert.Equal("desk@medicore.test", fixture.NewSlot.UpdatedBy);
+
+        // Both slots and the appointment in one save, in one transaction that committed.
+        Assert.Equal(1, fixture.UnitOfWork.Transactions);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+        Assert.Equal(1, fixture.UnitOfWork.Commits);
+    }
+
+    [Fact]
+    public async Task Every_read_and_write_of_a_reschedule_happens_between_begin_and_commit()
+    {
+        var fixture = new Fixture();
+
+        await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(
+            [
+                "begin",
+                $"lock appointment {AppointmentId}",
+                $"read slot {SlotId}",
+                $"lock patient {PatientId}",
+                $"read slot {NewSlotId}",
+                "check overlap",
+                "save",
+                "commit"
+            ],
+            fixture.Log);
+    }
+
+    [Fact]
+    public async Task A_reschedule_is_recorded_from_the_old_time_to_the_new()
+    {
+        var fixture = new Fixture();
+
+        await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        var entry = Assert.Single(fixture.History.Added);
+        Assert.Equal(AppointmentHistoryAction.Rescheduled, entry.Action);
+        Assert.Equal(AppointmentStatus.Booked, entry.FromStatus);
+        Assert.Equal(AppointmentStatus.Booked, entry.ToStatus);
+        Assert.Equal(SlotId, entry.FromSlotId);
+        Assert.Equal(NewSlotId, entry.ToSlotId);
+        Assert.Equal(Start, entry.FromStartUtc);
+        Assert.Equal(Start.AddDays(1), entry.ToStartUtc);
+        Assert.Equal("desk@medicore.test", entry.Actor);
+        Assert.Equal(Now, entry.OccurredAtUtc);
+    }
+
+    [Fact]
+    public async Task A_reschedule_announces_nothing()
+    {
+        // No appointment.rescheduled contract exists, and nothing downstream consumes one.
+        var fixture = new Fixture();
+
+        await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Empty(fixture.Outbox.Added);
+    }
+
+    [Fact]
+    public async Task A_new_slot_taken_mid_request_leaves_the_original_untouched()
+    {
+        // AC1. Another booking took the new slot between our read and our save, and
+        // ux_appointments_slot refused ours. The transaction rolls back as a whole.
+        var fixture = new Fixture();
+        fixture.UnitOfWork.Throw = new SlotAlreadyBookedException();
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentSlotTakenResult>(result);
+        Assert.Equal(1, fixture.UnitOfWork.Transactions);
+        Assert.Equal(0, fixture.UnitOfWork.Commits);
+        Assert.Equal("rollback", fixture.Log[^1]);
+        AssertStillOnTheOriginalSlot(fixture);
+        Assert.Equal(SlotStatus.Available, fixture.NewSlot.Status);
+    }
+
+    [Fact]
+    public async Task A_new_slot_booked_between_our_read_and_our_save_is_reported_taken_after_a_reread()
+    {
+        // The slot token caught the race. The retry reads the slot as the winner left it.
+        var fixture = new Fixture();
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+        fixture.UnitOfWork.BetweenAttempts = () => fixture.NewSlot.Status = SlotStatus.Booked;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentSlotTakenResult>(result);
+        Assert.Equal(2, fixture.UnitOfWork.Transactions);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+        AssertStillOnTheOriginalSlot(fixture);
+    }
+
+    [Fact]
+    public async Task A_lost_race_that_leaves_the_new_slot_free_moves_the_appointment_on_the_retry()
+    {
+        // The token only says the row changed — a harmless write, say. The retry finds it free.
+        var fixture = new Fixture();
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal(2, fixture.UnitOfWork.Transactions);
+        Assert.Equal(1, fixture.UnitOfWork.Commits);
+        Assert.Single(fixture.History.Added);
+        Assert.Equal(NewSlotId, fixture.Appointment.SlotId);
+    }
+
+    [Fact]
+    public async Task Three_lost_races_end_in_a_conflict_with_the_appointment_where_it_was()
+    {
+        var fixture = new Fixture();
+        fixture.UnitOfWork.Throw = new ConcurrentUpdateException();
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentContendedResult>(result);
+        Assert.Equal(3, fixture.UnitOfWork.Transactions);
+        Assert.Equal(0, fixture.UnitOfWork.Commits);
+        AssertStillOnTheOriginalSlot(fixture);
+        Assert.Equal(SlotStatus.Available, fixture.NewSlot.Status);
+    }
+
+    [Fact]
+    public async Task A_new_slot_already_booked_on_the_first_read_is_reported_by_its_status()
+    {
+        // Not a race we lost, so not "a moment ago": the slot was simply not free.
+        var fixture = new Fixture();
+        fixture.NewSlot.Status = SlotStatus.Booked;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(new AppointmentNewSlotNotAvailableResult(SlotStatus.Booked), result);
+        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+        AssertStillOnTheOriginalSlot(fixture);
+    }
+
+    // ── Reschedule: what the new slot must be ────────────────────────────────
+
+    [Theory]
+    [InlineData(SlotStatus.Blocked)]
+    [InlineData(SlotStatus.Flagged)]
+    public async Task A_new_slot_that_is_not_available_is_refused(string status)
+    {
+        var fixture = new Fixture();
+        fixture.NewSlot.Status = status;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(new AppointmentNewSlotNotAvailableResult(status), result);
+        AssertNothingChangedBy(fixture, expectedNewSlotStatus: status);
+    }
+
+    [Fact]
+    public async Task An_unknown_new_slot_is_not_found()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, Guid.NewGuid(), Desk);
+
+        Assert.IsType<AppointmentNewSlotNotFoundResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task Moving_to_the_slot_it_already_has_is_refused()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, SlotId, Desk);
+
+        Assert.IsType<AppointmentNewSlotSameAsCurrentResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task A_slot_with_another_doctor_is_refused()
+    {
+        // Rescheduling moves the time; a different doctor is a cancellation and a new booking.
+        var fixture = new Fixture();
+        fixture.NewSlot.DoctorId = OtherDoctorId;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentNewSlotDifferentDoctorResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task Nothing_can_move_to_a_doctor_who_is_no_longer_bookable()
+    {
+        var fixture = new Fixture();
+        fixture.Doctors.IsBookable = false;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentDoctorNotFoundResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task A_new_slot_that_has_already_started_is_refused()
+    {
+        var fixture = new Fixture();
+        fixture.NewSlot.StartUtc = Now;
+        fixture.NewSlot.EndUtc = Now.AddMinutes(30);
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(new AppointmentNewSlotInPastResult(Now), result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task A_new_time_that_clashes_with_another_of_the_patients_appointments_is_refused()
+    {
+        var fixture = new Fixture();
+        var other = new AppointmentEntity
+        {
+            AppointmentId = Guid.NewGuid(),
+            SlotId = Guid.NewGuid(),
+            PatientId = PatientId,
+            DoctorId = OtherDoctorId,
+            StartUtc = fixture.NewSlot.StartUtc.AddMinutes(15),
+            EndUtc = fixture.NewSlot.StartUtc.AddMinutes(45),
+            Status = AppointmentStatus.Booked
+        };
+        fixture.Appointments.Appointments.Add(other);
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(new AppointmentPatientOverlapResult(other.AppointmentId, other.StartUtc, other.EndUtc), result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task Moving_to_a_time_that_overlaps_the_old_one_is_not_a_clash_with_itself()
+    {
+        // Fifteen minutes later: the new time overlaps the appointment being moved, which must
+        // not count against it.
+        var fixture = new Fixture();
+        fixture.NewSlot.StartUtc = Start.AddMinutes(15);
+        fixture.NewSlot.EndUtc = Start.AddMinutes(45);
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentChangedResult>(result);
+    }
+
+    // ── Reschedule: window, status and who may ───────────────────────────────
+
+    [Fact]
+    public async Task Rescheduling_inside_the_window_is_refused_like_cancelling()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddHours(5);
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(new AppointmentInsideCancellationWindowResult(24, Now.AddHours(5)), result);
+        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+        Assert.Equal(SlotStatus.Available, fixture.NewSlot.Status);
+    }
+
+    [Fact]
+    public async Task A_stranded_booking_can_be_moved_even_inside_the_window()
+    {
+        // A schedule change flagged its slot: the clinic caused it, so the window does not apply.
+        // The flagged slot is removed rather than offered again.
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddHours(2);
+        fixture.Slot.Status = SlotStatus.Flagged;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal([fixture.Slot], fixture.Slots.Removed);
+        Assert.Equal(SlotStatus.Booked, fixture.NewSlot.Status);
+        Assert.Equal(NewSlotId, fixture.Appointment.SlotId);
+    }
+
+    [Theory]
+    [InlineData(AppointmentStatus.Cancelled)]
+    [InlineData(AppointmentStatus.Completed)]
+    [InlineData(AppointmentStatus.NoShow)]
+    public async Task Only_a_booked_appointment_can_be_rescheduled(string status)
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.Status = status;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.Equal(new AppointmentInvalidTransitionResult(status, AppointmentHistoryAction.Rescheduled), result);
+        AssertNothingChanged(fixture, expectedStatus: status);
+    }
+
+    [Fact]
+    public async Task A_patient_can_reschedule_their_own_appointment_but_not_anyone_elses()
+    {
+        var own = new Fixture();
+        var someoneElses = new Fixture();
+
+        var ownResult = await own.Service.RescheduleAsync(
+            AppointmentId, NewSlotId, new AppointmentCaller("patient", PatientId));
+        var otherResult = await someoneElses.Service.RescheduleAsync(
+            AppointmentId, NewSlotId, new AppointmentCaller("patient", OtherPatientId));
+
+        Assert.IsType<AppointmentChangedResult>(ownResult);
+        Assert.IsType<AppointmentNotFoundResult>(otherResult);
+        AssertNothingChanged(someoneElses);
+    }
+
+    [Fact]
+    public async Task Rescheduling_an_unknown_appointment_is_not_found()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.RescheduleAsync(Guid.NewGuid(), NewSlotId, Desk);
+
+        Assert.IsType<AppointmentNotFoundResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static void AssertNothingChangedBy(Fixture fixture, string expectedNewSlotStatus)
+    {
+        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+        Assert.Equal(expectedNewSlotStatus, fixture.NewSlot.Status);
+        Assert.Null(fixture.NewSlot.UpdatedBy);
+        AssertStillOnTheOriginalSlot(fixture);
+    }
 
     /// <summary>
     /// A refusal leaves everything as it was: no save, no history, no event, and the appointment
@@ -334,6 +689,23 @@ public sealed class AppointmentLifecycleServiceTests
         Assert.Null(fixture.Appointment.UpdatedBy);
         Assert.Equal(SlotStatus.Booked, fixture.Slot.Status);
         Assert.Null(fixture.Slot.UpdatedBy);
+        Assert.Equal(SlotStatus.Available, fixture.NewSlot.Status);
+        Assert.Null(fixture.NewSlot.UpdatedBy);
+    }
+
+    /// <summary>
+    /// AC1's "leaving the original untouched": still on its old slot, at its old time, still
+    /// holding that slot, and the new slot still free.
+    /// </summary>
+    private static void AssertStillOnTheOriginalSlot(Fixture fixture)
+    {
+        Assert.Equal(SlotId, fixture.Appointment.SlotId);
+        Assert.Equal(Start, fixture.Appointment.StartUtc);
+        Assert.Equal(Start.AddMinutes(30), fixture.Appointment.EndUtc);
+        Assert.Equal(AppointmentStatus.Booked, fixture.Appointment.Status);
+        Assert.Equal(SlotStatus.Booked, fixture.Slot.Status);
+        Assert.Empty(fixture.History.Added);
+        Assert.Empty(fixture.Outbox.Added);
     }
 
     /// <summary>
@@ -371,8 +743,21 @@ public sealed class AppointmentLifecycleServiceTests
                 CreatedBy = "desk"
             };
 
+            // A day after the original, same doctor, free: where a reschedule moves to.
+            NewSlot = new Slot
+            {
+                SlotId = NewSlotId,
+                DoctorId = DoctorId,
+                StartUtc = Start.AddDays(1),
+                EndUtc = Start.AddDays(1).AddMinutes(30),
+                SlotDate = ColomboTime.ToColomboDate(Start.AddDays(1)),
+                DurationMinutes = 30,
+                Status = SlotStatus.Available
+            };
+
             Appointments = new FakeAppointmentRepository(Log, Appointment);
-            Slots = new FakeSlotRepository(Log, Slot);
+            Slots = new FakeSlotRepository(Log, Slot, NewSlot);
+            Doctors = new FakeDoctorCacheRepository();
             Outbox = new FakeOutboxMessageRepository();
             History = new FakeAppointmentHistoryRepository();
             UnitOfWork = new FakeUnitOfWork(Log, onBegin: TakeSnapshot, onRollback: Restore);
@@ -380,6 +765,7 @@ public sealed class AppointmentLifecycleServiceTests
             Service = new AppointmentLifecycleService(
                 Appointments,
                 Slots,
+                Doctors,
                 Outbox,
                 History,
                 UnitOfWork,
@@ -394,7 +780,11 @@ public sealed class AppointmentLifecycleServiceTests
 
         public Slot Slot { get; }
 
+        public Slot NewSlot { get; }
+
         public FakeAppointmentRepository Appointments { get; }
+
+        public FakeDoctorCacheRepository Doctors { get; }
 
         public FakeSlotRepository Slots { get; }
 
@@ -451,13 +841,29 @@ public sealed class AppointmentLifecycleServiceTests
             return Task.FromResult(Appointments.FirstOrDefault(a => a.AppointmentId == appointmentId));
         }
 
-        public Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Cancelling never locks the patient.");
+        public Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default)
+        {
+            _log.Add($"lock patient {patientId}");
+            return Task.CompletedTask;
+        }
 
+        // The same half-open predicate and exclusion the real repository applies, so the rules
+        // are exercised rather than assumed.
         public Task<AppointmentEntity?> FindPatientOverlapAsync(
-            Guid patientId, DateTime startUtc, DateTime endUtc,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Cancelling never checks overlaps.");
+            Guid patientId, DateTime startUtc, DateTime endUtc, Guid? excludeAppointmentId = null,
+            CancellationToken cancellationToken = default)
+        {
+            _log.Add("check overlap");
+            return Task.FromResult(Appointments
+                .Where(a =>
+                    a.PatientId == patientId
+                    && a.Status == AppointmentStatus.Booked
+                    && a.StartUtc < endUtc
+                    && a.EndUtc > startUtc
+                    && a.AppointmentId != excludeAppointmentId)
+                .OrderBy(a => a.StartUtc)
+                .FirstOrDefault());
+        }
 
         public Task AddAsync(AppointmentEntity appointment, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Changes never create appointments.");
@@ -512,6 +918,31 @@ public sealed class AppointmentLifecycleServiceTests
         public Task<IReadOnlyList<Slot>> GetFlaggedAsync(
             Guid? doctorId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Changes never read the attention list.");
+    }
+
+    private sealed class FakeDoctorCacheRepository : IDoctorCacheRepository
+    {
+        public bool IsBookable { get; set; } = true;
+
+        public Task<DoctorCache?> GetActiveAsync(Guid doctorId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(IsBookable
+                ? new DoctorCache { DoctorId = doctorId, FullName = "Nimal Perera", IsActive = true }
+                : null);
+
+        public Task<DoctorCache?> GetTrackedByDoctorIdAsync(
+            Guid doctorId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Changes never write the cache.");
+
+        public Task<IReadOnlyList<DoctorCache>> ListActiveAsync(
+            string? specialization, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Changes work from one doctor.");
+
+        public Task<IReadOnlyList<string>> ListSpecializationsAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Changes never list specializations.");
+
+        public Task AddAsync(DoctorCache doctor, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Changes never write the cache.");
     }
 
     private sealed class FakeOutboxMessageRepository : IOutboxMessageRepository

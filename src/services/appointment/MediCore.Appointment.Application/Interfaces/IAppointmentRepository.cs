@@ -22,6 +22,19 @@ public interface IAppointmentRepository
     Task AddAsync(AppointmentEntity appointment, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Takes a transaction-scoped lock on one patient's bookings, waiting while another
+    /// transaction holds it. Released automatically when the transaction commits or rolls back,
+    /// so it must be called inside <see cref="IUnitOfWork.ExecuteInTransactionAsync{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// SCRUM-35. The overlap check reads, then the booking writes; two bookings for one patient at
+    /// overlapping times could both read "no clash" and both write, because a time-range overlap
+    /// cannot be a unique index. Holding this lock from before the read until the commit makes the
+    /// second booking read after the first has committed, so it sees the clash.
+    /// </remarks>
+    Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// An active booking for this patient whose time window intersects
     /// <paramref name="startUtc"/>..<paramref name="endUtc"/>, or null if the patient is free.
     /// </summary>
@@ -42,24 +55,16 @@ public interface IAppointmentRepository
     /// Answerable entirely from this service's own tables: it needs what the patient already
     /// booked, never who they are, so nothing crosses a service boundary.
     /// </para>
+    /// <para>
+    /// <paramref name="excludeAppointmentId"/> leaves one appointment out — the one a reschedule is
+    /// moving, which would otherwise clash with its own new time whenever the two overlap.
+    /// </para>
     /// </remarks>
-    /// <summary>
-    /// Takes a transaction-scoped lock on one patient's bookings, waiting while another
-    /// transaction holds it. Released automatically when the transaction commits or rolls back,
-    /// so it must be called inside <see cref="IUnitOfWork.ExecuteInTransactionAsync{T}"/>.
-    /// </summary>
-    /// <remarks>
-    /// SCRUM-35. The overlap check reads, then the booking writes; two bookings for one patient at
-    /// overlapping times could both read "no clash" and both write, because a time-range overlap
-    /// cannot be a unique index. Holding this lock from before the read until the commit makes the
-    /// second booking read after the first has committed, so it sees the clash.
-    /// </remarks>
-    Task LockPatientAsync(Guid patientId, CancellationToken cancellationToken = default);
-
     Task<AppointmentEntity?> FindPatientOverlapAsync(
         Guid patientId,
         DateTime startUtc,
         DateTime endUtc,
+        Guid? excludeAppointmentId = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
