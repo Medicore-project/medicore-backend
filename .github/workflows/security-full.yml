@@ -85,6 +85,16 @@ jobs:
           dotnet build src/gateway/MediCore.Gateway/Gateway.csproj \
             --configuration Release --no-restore
 
+          # Patient (net8.0)
+          dotnet restore src/services/patient/MediCore.Patient.Api/Api.csproj
+          dotnet build src/services/patient/MediCore.Patient.Api/Api.csproj \
+            --configuration Release --no-restore
+
+          # Appointment (net8.0)
+          dotnet restore src/services/appointment/MediCore.Appointment.Api/Api.csproj
+          dotnet build src/services/appointment/MediCore.Appointment.Api/Api.csproj \
+            --configuration Release --no-restore
+
       - name: CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
@@ -161,6 +171,10 @@ jobs:
             name: "identity"
           - image: "ghcr.io/medicore-project/medicore-gateway:latest"
             name: "gateway"
+          - image: "ghcr.io/medicore-project/medicore-patient:latest"
+            name: "patient"
+          - image: "ghcr.io/medicore-project/medicore-appointment:latest"
+            name: "appointment"
 
     steps:
       - name: Checkout
@@ -217,3 +231,21 @@ jobs:
           echo "Image: \`${{ matrix.image }}\`" >> $GITHUB_STEP_SUMMARY
           echo "Severities checked: HIGH, CRITICAL" >> $GITHUB_STEP_SUMMARY
           echo "Results uploaded to GitHub Security → Code Scanning" >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # OWASP ZAP — Nightly Baseline DAST Scan (SCRUM-40)
+  # ---------------------------------------------------------------------------
+  zap-scan:
+    name: OWASP ZAP — DAST Baseline Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "https://medicore-gateway.azurewebsites.net"
+          cmd_options: "-a"
+          allow_issue_writing: false
+        continue-on-error: true

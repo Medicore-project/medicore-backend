@@ -83,9 +83,23 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - host.docker.internal:5003
+          - medicore-appointment:8080      # Docker container (Compose)
+          - host.docker.internal:5003      # host machine (dotnet run)
         labels:
           service: appointment
+          env: local
+
+  # --------------------------------------------------------------------------
+  # Kafka Exporter (topic offsets, consumer lag, DLT depth)
+  # --------------------------------------------------------------------------
+  - job_name: kafka-exporter
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+          - medicore-kafka-exporter:9308   # Docker container (Compose)
+          - host.docker.internal:9308      # host machine
+        labels:
+          service: kafka
           env: local
 
   # --------------------------------------------------------------------------
