@@ -13,10 +13,20 @@ namespace MediCore.Appointment.Infrastructure.Messaging;
 /// the same transaction as the appointment, and if the broker is unreachable the row simply stays
 /// unprocessed and is retried on the next pass (SCRUM-34 AC5).
 /// <para>
-/// Deliberately identical to the Patient and Identity processors, including the hard-coded interval
+/// Otherwise identical to the Patient and Identity processors, including the hard-coded interval
 /// and batch size and the absence of a retry cap or backoff. A permanently unpublishable message is
 /// therefore retried forever; that is a gap shared by all three services and is recorded rather than
 /// fixed here, so the three stay comparable.
+/// </para>
+/// <para>
+/// The one deliberate difference (SCRUM-36): once a message fails, every later message in the
+/// batch with the <strong>same event key</strong> is held back until the next pass. Every event of
+/// one appointment shares its key, and the key is what keeps them on one partition in order — but
+/// only if they reach the broker in order. Without this, a booking that failed to publish would be
+/// overtaken by its own cancellation in the same batch, and billing would be asked to void an
+/// invoice it has not raised. Messages for other appointments are not held back. The Patient and
+/// Identity processors are left unchanged by this ticket; whether they need the same guard is
+/// recorded as an open item in the SCRUM-36 write-up.
 /// </para>
 /// </remarks>
 public sealed class OutboxProcessor : BackgroundService
@@ -64,8 +74,18 @@ public sealed class OutboxProcessor : BackgroundService
         var publisher = scope.ServiceProvider.GetRequiredService<IKafkaEventPublisher>();
         var messages = await repository.GetUnprocessedBatchAsync(20, cancellationToken);
 
+        // Keys whose earlier message failed in this pass. A later message for the same key waits:
+        // it is neither published nor counted as a retry, and the next pass (which reads oldest
+        // first) meets the failed one ahead of it again.
+        var blockedKeys = new HashSet<string>(StringComparer.Ordinal);
+
         foreach (var message in messages)
         {
+            if (blockedKeys.Contains(message.EventKey))
+            {
+                continue;
+            }
+
             try
             {
                 await publisher.PublishAsync(message, cancellationToken);
@@ -74,6 +94,7 @@ public sealed class OutboxProcessor : BackgroundService
             }
             catch (Exception exception)
             {
+                blockedKeys.Add(message.EventKey);
                 message.RetryCount++;
                 message.Error = exception.Message.Length > 2_000
                     ? exception.Message[..2_000]
