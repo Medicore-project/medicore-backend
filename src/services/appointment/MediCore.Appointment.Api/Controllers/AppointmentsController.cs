@@ -208,7 +208,8 @@ public sealed class AppointmentsController : AppointmentControllerBase
                 Title = "That appointment time has already passed. Please choose a later slot.",
                 Status = StatusCodes.Status400BadRequest
             }),
-            BookingPatientOverlapResult overlap => ConflictProblem(DescribeClash(overlap)),
+            BookingPatientOverlapResult overlap => ConflictProblem(
+                DescribeClash(overlap.ExistingStartUtc, overlap.ExistingEndUtc)),
             BookingSlotTakenResult => ConflictProblem(
                 "Someone booked this slot a moment ago. Please choose another."),
             BookingContendedResult => ConflictProblem(
@@ -249,15 +250,4 @@ public sealed class AppointmentsController : AppointmentControllerBase
         var history = await _queries.GetHistoryAsync(appointmentId, cancellationToken);
         return history is null ? NotFound() : Ok(history);
     }
-
-    /// <summary>
-    /// SCRUM-34 AC3 asks the clash to be explained, so the existing appointment's window is spelled
-    /// out in Colombo time — the form the patient recognises, since UTC would be five and a half
-    /// hours off what they were told.
-    /// </summary>
-    private static string DescribeClash(BookingPatientOverlapResult overlap) =>
-        $"This patient already has an appointment on "
-        + $"{ColomboTime.ToColomboDate(overlap.ExistingStartUtc):dd MMM yyyy} from "
-        + $"{ColomboTime.ToColombo(overlap.ExistingStartUtc):HH:mm} to "
-        + $"{ColomboTime.ToColombo(overlap.ExistingEndUtc):HH:mm}.";
 }

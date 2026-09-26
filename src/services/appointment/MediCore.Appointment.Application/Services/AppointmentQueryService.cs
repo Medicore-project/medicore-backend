@@ -65,6 +65,7 @@ public sealed class AppointmentQueryService : IAppointmentQueryService
 
         return listings.Select(listing => new PatientAppointmentResponse(
                 listing.Appointment.AppointmentId,
+                listing.Appointment.DoctorId,
                 listing.DoctorName,
                 listing.DoctorSpecialization,
                 listing.Appointment.StartUtc,

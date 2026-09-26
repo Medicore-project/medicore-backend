@@ -48,3 +48,16 @@ public sealed class CancelAppointmentRequestValidator : AbstractValidator<Cancel
             .WithMessage($"The reason must be at most {MaxReasonLength} characters.");
     }
 }
+
+/// <summary>Validates a <see cref="RescheduleAppointmentRequest"/>.</summary>
+/// <remarks>
+/// Only that a slot is named. Whether it is free, in the future, the same doctor's and clear of the
+/// patient's other appointments needs the rows, so the lifecycle service decides.
+/// </remarks>
+public sealed class RescheduleAppointmentRequestValidator : AbstractValidator<RescheduleAppointmentRequest>
+{
+    public RescheduleAppointmentRequestValidator()
+    {
+        RuleFor(r => r.NewSlotId).NotEmpty();
+    }
+}

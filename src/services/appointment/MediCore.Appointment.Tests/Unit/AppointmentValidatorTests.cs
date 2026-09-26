@@ -99,4 +99,15 @@ public sealed class AppointmentValidatorTests
     {
         Assert.Equal(500, CancelAppointmentRequestValidator.MaxReasonLength);
     }
+
+    // ── SCRUM-36: reschedule ─────────────────────────────────────────────────
+
+    [Fact]
+    public void A_reschedule_must_name_the_new_slot()
+    {
+        var validator = new RescheduleAppointmentRequestValidator();
+
+        Assert.False(validator.Validate(new RescheduleAppointmentRequest(Guid.Empty)).IsValid);
+        Assert.True(validator.Validate(new RescheduleAppointmentRequest(Guid.NewGuid())).IsValid);
+    }
 }

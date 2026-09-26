@@ -65,6 +65,7 @@ public sealed class AppointmentQueryServiceTests
             (PatientId, Now, AppointmentQueryService.UpcomingLimit),
             fixture.Repository.LastUpcomingQuery);
         Assert.Equal(appointment.AppointmentId, result.AppointmentId);
+        Assert.Equal(DoctorId, result.DoctorId);
         Assert.Equal("Dr Nimal Perera", result.DoctorName);
         Assert.Equal(appointment.StartUtc, result.StartUtc);
         Assert.Equal(appointment.SlotDate, result.SlotDate);

@@ -67,9 +67,14 @@ public sealed record AppointmentSummaryResponse(
 /// <remarks>
 /// Reduced on purpose, like the other public DTOs: no patient id, no slot id, no audit columns. The
 /// caller already knows who they are; what they need is with whom and when.
+/// <para>
+/// <c>DoctorId</c> was added in SCRUM-36 so the page can list that doctor's free times for a
+/// reschedule. It reveals nothing new: the public doctor listing already publishes every id.
+/// </para>
 /// </remarks>
 public sealed record PatientAppointmentResponse(
     Guid AppointmentId,
+    Guid DoctorId,
     string? DoctorName,
     string? Specialization,
     DateTime StartUtc,
@@ -103,3 +108,7 @@ public sealed record AppointmentHistoryResponse(
 /// Required, at most 500 characters.
 /// </param>
 public sealed record CancelAppointmentRequest(string Reason);
+
+/// <summary>Moves a booked appointment to another slot with the same doctor.</summary>
+/// <param name="NewSlotId">The slot's business key, from the availability listing.</param>
+public sealed record RescheduleAppointmentRequest(Guid NewSlotId);

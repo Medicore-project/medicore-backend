@@ -175,6 +175,116 @@ public sealed class AppointmentChangesControllerTests
         Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
     }
 
+    // ── Reschedule ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Staff_reschedule_with_no_patient_restriction_and_get_the_moved_appointment()
+    {
+        var service = new StubLifecycleService();
+        var newSlotId = Guid.NewGuid();
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(newSlotId), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        var call = Assert.Single(service.Reschedules);
+        Assert.Equal((AppointmentId, newSlotId), (call.AppointmentId, call.NewSlotId));
+        Assert.Null(call.Caller.PatientId);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+    }
+
+    [Fact]
+    public async Task A_patient_reschedules_as_their_token_names_and_gets_204()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await PatientController(service).RescheduleMine(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(PatientId, Assert.Single(service.Reschedules).Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_reschedule_naming_no_slot_never_reaches_the_service()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.Empty), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Empty(service.Reschedules);
+    }
+
+    public static TheoryData<AppointmentChangeResult, int> RescheduleOutcomes() => new()
+    {
+        { new AppointmentNewSlotNotFoundResult(), StatusCodes.Status404NotFound },
+        { new AppointmentDoctorNotFoundResult(), StatusCodes.Status404NotFound },
+        { new AppointmentNewSlotSameAsCurrentResult(), StatusCodes.Status400BadRequest },
+        { new AppointmentNewSlotDifferentDoctorResult(), StatusCodes.Status400BadRequest },
+        { new AppointmentNewSlotInPastResult(StartUtc), StatusCodes.Status400BadRequest },
+        { new AppointmentInsideCancellationWindowResult(24, StartUtc), StatusCodes.Status400BadRequest },
+        { new AppointmentNewSlotNotAvailableResult(SlotStatus.Blocked), StatusCodes.Status409Conflict },
+        { new AppointmentPatientOverlapResult(Guid.NewGuid(), StartUtc, StartUtc.AddMinutes(30)), StatusCodes.Status409Conflict },
+        { new AppointmentSlotTakenResult(), StatusCodes.Status409Conflict },
+        { new AppointmentContendedResult(), StatusCodes.Status409Conflict },
+        { new AppointmentInvalidTransitionResult(AppointmentStatus.Cancelled, AppointmentHistoryAction.Rescheduled), StatusCodes.Status409Conflict }
+    };
+
+    [Theory]
+    [MemberData(nameof(RescheduleOutcomes))]
+    public async Task Every_reschedule_outcome_has_its_status_code(AppointmentChangeResult outcome, int statusCode)
+    {
+        var service = new StubLifecycleService { Result = outcome };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(statusCode, StatusCodeOf(result));
+    }
+
+    [Fact]
+    public async Task A_taken_slot_says_the_appointment_was_not_moved()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentSlotTakenResult() };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Contains("was not moved", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_clash_names_the_other_appointment_in_colombo_time()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentPatientOverlapResult(Guid.NewGuid(), StartUtc, StartUtc.AddMinutes(30))
+        };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(
+            "This patient already has an appointment on 26 Sep 2026 from 10:30 to 11:00.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_rescheduled_invalid_transition_uses_the_right_verb()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Cancelled, AppointmentHistoryAction.Rescheduled)
+        };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal("This appointment is Cancelled and can no longer be rescheduled.", ProblemOf(result).Title);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static int? StatusCodeOf(IActionResult result) => result switch
@@ -208,7 +318,10 @@ public sealed class AppointmentChangesControllerTests
             User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
         };
 
-        return new AppointmentChangesController(new CancelAppointmentRequestValidator(), service)
+        return new AppointmentChangesController(
+            new CancelAppointmentRequestValidator(),
+            new RescheduleAppointmentRequestValidator(),
+            service)
         {
             ControllerContext = new ControllerContext { HttpContext = context }
         };
@@ -220,12 +333,17 @@ public sealed class AppointmentChangesControllerTests
 
         public List<(Guid AppointmentId, string Reason, AppointmentCaller Caller)> Cancels { get; } = [];
 
+        public List<(Guid AppointmentId, Guid NewSlotId, AppointmentCaller Caller)> Reschedules { get; } = [];
+
         public Task<AppointmentChangeResult> RescheduleAsync(
             Guid appointmentId,
             Guid newSlotId,
             AppointmentCaller caller,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("No route reschedules yet.");
+            CancellationToken cancellationToken = default)
+        {
+            Reschedules.Add((appointmentId, newSlotId, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.Booked)));
+        }
 
         public Task<AppointmentChangeResult> CancelAsync(
             Guid appointmentId,
