@@ -400,7 +400,7 @@ services:
       patient-api:
         condition: service_healthy
       appointment-api:
-        condition: service_started
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
