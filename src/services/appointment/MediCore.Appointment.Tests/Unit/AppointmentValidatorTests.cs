@@ -60,4 +60,43 @@ public sealed class AppointmentValidatorTests
 
         Assert.True(result.IsValid);
     }
+
+    // ── SCRUM-36: cancel ─────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void A_cancellation_needs_a_reason(string? reason)
+    {
+        var result = new CancelAppointmentRequestValidator().Validate(new CancelAppointmentRequest(reason!));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(CancelAppointmentRequest.Reason));
+    }
+
+    [Fact]
+    public void A_reason_may_fill_the_history_column_but_not_overflow_it()
+    {
+        var validator = new CancelAppointmentRequestValidator();
+        var longest = new string('x', CancelAppointmentRequestValidator.MaxReasonLength);
+
+        Assert.True(validator.Validate(new CancelAppointmentRequest(longest)).IsValid);
+        Assert.False(validator.Validate(new CancelAppointmentRequest(longest + "x")).IsValid);
+    }
+
+    [Fact]
+    public void Surrounding_spaces_do_not_count_against_the_limit()
+    {
+        // The service trims before storing, so the limit applies to what is stored.
+        var padded = "  " + new string('x', CancelAppointmentRequestValidator.MaxReasonLength) + "  ";
+
+        Assert.True(new CancelAppointmentRequestValidator().Validate(new CancelAppointmentRequest(padded)).IsValid);
+    }
+
+    [Fact]
+    public void The_reason_limit_matches_the_history_column()
+    {
+        Assert.Equal(500, CancelAppointmentRequestValidator.MaxReasonLength);
+    }
 }

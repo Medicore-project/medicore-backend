@@ -108,6 +108,38 @@ public sealed class AppointmentOutboxMessagesTests
         Assert.DoesNotContain("\"ServiceCode\"", message.Payload);
     }
 
+    // ── SCRUM-36: appointment.cancelled ──────────────────────────────────────
+
+    [Fact]
+    public void A_cancellation_goes_to_the_same_topic_and_partition_as_its_booking()
+    {
+        var booked = AppointmentOutboxMessages.Booked(Appointment(), "corr-1", OccurredOnUtc);
+        var cancelled = AppointmentOutboxMessages.Cancelled(Appointment(), "Travelling", "corr-2", OccurredOnUtc);
+
+        Assert.Equal("appointment.cancelled", cancelled.EventType);
+        Assert.Equal(booked.Topic, cancelled.Topic);
+        Assert.Equal(booked.EventKey, cancelled.EventKey);
+        Assert.Equal(AppointmentId.ToString(), cancelled.EventKey);
+    }
+
+    [Fact]
+    public void A_cancellation_carries_its_own_message_id_the_reason_and_version_one()
+    {
+        var message = AppointmentOutboxMessages.Cancelled(Appointment(), "Travelling", "corr-2", OccurredOnUtc);
+        var published = JsonSerializer.Deserialize<AppointmentCancelledEvent>(message.Payload, ReaderOptions)!;
+
+        Assert.NotEqual(Guid.Empty, message.MessageId);
+        Assert.Equal(published.MessageId, message.MessageId);
+        Assert.Equal(AppointmentId, published.AppointmentId);
+        Assert.Equal("Travelling", published.Reason);
+        Assert.Equal("corr-2", published.CorrelationId);
+        Assert.Equal("corr-2", message.CorrelationId);
+        Assert.Equal(OccurredOnUtc, published.OccurredAtUtc);
+        Assert.Equal(OccurredOnUtc, message.OccurredOnUtc);
+        Assert.Equal(1, message.EventVersion);
+        Assert.Contains("\"reason\"", message.Payload);
+    }
+
     private static AppointmentBookedEvent Deserialize(OutboxMessage message) =>
         JsonSerializer.Deserialize<AppointmentBookedEvent>(message.Payload, ReaderOptions)!;
 

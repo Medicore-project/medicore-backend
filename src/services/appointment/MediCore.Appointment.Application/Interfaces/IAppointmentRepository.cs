@@ -87,4 +87,21 @@ public interface IAppointmentRepository
     Task<AppointmentEntity?> GetByAppointmentIdAsync(
         Guid appointmentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns an appointment by its business key, tracked for change, and locks its row until the
+    /// transaction ends. Must be called inside
+    /// <see cref="IUnitOfWork.ExecuteInTransactionAsync{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// SCRUM-36. Every change to an appointment starts here, so two changes to the same appointment
+    /// run one after the other: the second waits, then reads what the first committed. Without it
+    /// a cancel and a complete arriving together could both see <c>Booked</c> and both succeed,
+    /// leaving a completed appointment on a released slot. A row lock rather than an
+    /// <c>xmin</c> token, so waiting replaces failing and retrying, and the SCRUM-35 rule that only
+    /// the slot carries a token stands.
+    /// </remarks>
+    Task<AppointmentEntity?> GetTrackedForUpdateAsync(
+        Guid appointmentId,
+        CancellationToken cancellationToken = default);
 }

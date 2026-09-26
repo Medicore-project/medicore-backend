@@ -685,6 +685,10 @@ public sealed class AppointmentBookingServiceTests
         public Task<IReadOnlyList<AppointmentListing>> ListUpcomingForPatientAsync(
             Guid patientId, DateTime nowUtc, int limit, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Booking never lists appointments.");
+
+        public Task<AppointmentEntity?> GetTrackedForUpdateAsync(
+            Guid appointmentId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Booking creates appointments; it never changes one.");
     }
 
     private sealed class FakeDoctorCacheRepository : IDoctorCacheRepository

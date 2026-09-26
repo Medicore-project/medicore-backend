@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediCore.Appointment.Application.Entities;
+using MediCore.Contracts.Events;
 using MediCore.Contracts.Events.Appointment;
 using AppointmentEntity = MediCore.Appointment.Application.Entities.Appointment;
 
@@ -59,4 +60,53 @@ public static class AppointmentOutboxMessages
             OccurredOnUtc = occurredOnUtc
         };
     }
+
+    /// <summary>
+    /// One <c>appointment.cancelled</c> for a cancellation (SCRUM-36), so billing can void what it
+    /// raised for the booking.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by the appointment id exactly as <see cref="Booked"/> is. That shared key puts both on
+    /// one partition, which is what stops a cancellation reaching billing before the booking it
+    /// cancels.
+    /// </remarks>
+    public static OutboxMessage Cancelled(
+        AppointmentEntity appointment,
+        string reason,
+        string correlationId,
+        DateTime occurredOnUtc)
+    {
+        var cancelledEvent = new AppointmentCancelledEvent
+        {
+            AppointmentId = appointment.AppointmentId,
+            Reason = reason,
+            CorrelationId = correlationId,
+            OccurredAtUtc = occurredOnUtc
+        };
+
+        return ToOutboxMessage(
+            cancelledEvent,
+            appointment,
+            JsonSerializer.Serialize(cancelledEvent, SerializerOptions),
+            correlationId,
+            occurredOnUtc);
+    }
+
+    /// <summary>The row every event after the booking is written as; see <see cref="Booked"/> for why each field is what it is.</summary>
+    private static OutboxMessage ToOutboxMessage(
+        IntegrationEvent integrationEvent,
+        AppointmentEntity appointment,
+        string payload,
+        string correlationId,
+        DateTime occurredOnUtc) => new()
+    {
+        MessageId = integrationEvent.MessageId,
+        Topic = Topic,
+        EventKey = appointment.AppointmentId.ToString(),
+        EventType = integrationEvent.EventType,
+        EventVersion = integrationEvent.Version,
+        CorrelationId = correlationId,
+        Payload = payload,
+        OccurredOnUtc = occurredOnUtc
+    };
 }

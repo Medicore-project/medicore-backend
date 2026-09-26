@@ -197,7 +197,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         // BookAsync.
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return new BookingCreatedResult(ToResponse(appointment));
+        return new BookingCreatedResult(AppointmentMapping.ToResponse(appointment));
     }
 
     public async Task<AppointmentResponse?> GetByIdAsync(
@@ -207,21 +207,6 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         var appointment = await _appointmentRepository.GetByAppointmentIdAsync(
             appointmentId, cancellationToken);
 
-        return appointment is null ? null : ToResponse(appointment);
+        return appointment is null ? null : AppointmentMapping.ToResponse(appointment);
     }
-
-    private static AppointmentResponse ToResponse(AppointmentEntity appointment) => new(
-        appointment.AppointmentId,
-        appointment.PatientId,
-        appointment.PatientNumber,
-        appointment.PatientName,
-        appointment.DoctorId,
-        appointment.SlotId,
-        appointment.StartUtc,
-        appointment.EndUtc,
-        appointment.SlotDate,
-        appointment.DurationMinutes,
-        appointment.ServiceCode,
-        appointment.Status,
-        appointment.CreatedAt);
 }

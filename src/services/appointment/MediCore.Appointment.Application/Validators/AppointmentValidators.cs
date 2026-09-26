@@ -28,3 +28,23 @@ public sealed class BookAppointmentRequestValidator : AbstractValidator<BookAppo
             .When(r => r.ServiceCode is not null);
     }
 }
+
+/// <summary>Validates a <see cref="CancelAppointmentRequest"/>.</summary>
+/// <remarks>
+/// Only the body. Whether this appointment may be cancelled at all — its status, the cancellation
+/// window — needs the row and a clock, so the lifecycle service decides it.
+/// </remarks>
+public sealed class CancelAppointmentRequestValidator : AbstractValidator<CancelAppointmentRequest>
+{
+    /// <summary>The <c>appointment_history.Reason</c> column's width.</summary>
+    public const int MaxReasonLength = 500;
+
+    public CancelAppointmentRequestValidator()
+    {
+        RuleFor(r => r.Reason)
+            .Must(reason => !string.IsNullOrWhiteSpace(reason))
+            .WithMessage("A reason for the cancellation is required.")
+            .Must(reason => reason is null || reason.Trim().Length <= MaxReasonLength)
+            .WithMessage($"The reason must be at most {MaxReasonLength} characters.");
+    }
+}

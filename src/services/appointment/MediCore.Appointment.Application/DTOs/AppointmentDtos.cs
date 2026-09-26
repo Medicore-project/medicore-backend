@@ -96,3 +96,10 @@ public sealed record AppointmentHistoryResponse(
     string? Reason,
     string Actor,
     DateTime OccurredAtUtc);
+
+/// <summary>Cancels a booked appointment.</summary>
+/// <param name="Reason">
+/// Why — recorded in the appointment history and carried on <c>appointment.cancelled</c>.
+/// Required, at most 500 characters.
+/// </param>
+public sealed record CancelAppointmentRequest(string Reason);

@@ -186,6 +186,10 @@ public sealed class AppointmentQueryServiceTests
         public Task AddAsync(AppointmentEntity appointment, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Queries never write.");
 
+        public Task<AppointmentEntity?> GetTrackedForUpdateAsync(
+            Guid appointmentId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Queries never lock.");
+
         public Task<AppointmentEntity?> FindPatientOverlapAsync(
             Guid patientId, DateTime startUtc, DateTime endUtc, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Queries never check overlaps.");

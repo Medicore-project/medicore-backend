@@ -16,6 +16,8 @@ public static class DependencyInjection
 
         services.Configure<SchedulingOptions>(
             configuration.GetSection(SchedulingOptions.SectionName));
+        services.Configure<CancellationPolicyOptions>(
+            configuration.GetSection(CancellationPolicyOptions.SectionName));
 
         services.AddScoped<ISlotGenerator, SlotGenerator>();
         services.AddScoped<ISlotReconciler, SlotReconciler>();
@@ -25,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<ISlotService, SlotService>();
         services.AddScoped<IAppointmentBookingService, AppointmentBookingService>();
         services.AddScoped<IAppointmentQueryService, AppointmentQueryService>();
+        services.AddScoped<IAppointmentLifecycleService, AppointmentLifecycleService>();
         services.AddScoped<IPublicHolidayService, PublicHolidayService>();
         services.AddScoped<IDoctorLeaveService, DoctorLeaveService>();
         services.AddScoped<IStaffEventHandler, StaffEventHandler>();
