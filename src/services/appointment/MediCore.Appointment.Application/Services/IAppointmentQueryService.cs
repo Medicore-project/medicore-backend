@@ -23,4 +23,12 @@ public interface IAppointmentQueryService
     Task<IReadOnlyList<PatientAppointmentResponse>> ListUpcomingForPatientAsync(
         Guid patientId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Every recorded change to one appointment, oldest first, or null when no such appointment
+    /// exists.
+    /// </summary>
+    Task<IReadOnlyList<AppointmentHistoryResponse>?> GetHistoryAsync(
+        Guid appointmentId,
+        CancellationToken cancellationToken = default);
 }

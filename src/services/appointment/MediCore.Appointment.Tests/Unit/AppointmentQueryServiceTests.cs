@@ -70,6 +70,58 @@ public sealed class AppointmentQueryServiceTests
         Assert.Equal(appointment.SlotDate, result.SlotDate);
     }
 
+    // ── SCRUM-36: history ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task History_reads_back_every_entry_oldest_first()
+    {
+        var appointment = Booked();
+        var fixture = new Fixture(new AppointmentListing(appointment, null, null));
+        fixture.History.Entries.Add(new AppointmentHistoryEntry
+        {
+            AppointmentId = appointment.AppointmentId,
+            Action = AppointmentHistoryAction.Cancelled,
+            FromStatus = AppointmentStatus.Booked,
+            ToStatus = AppointmentStatus.Cancelled,
+            FromSlotId = appointment.SlotId,
+            Reason = "Travelling",
+            Actor = "patient",
+            OccurredAtUtc = Now.AddHours(2)
+        });
+        fixture.History.Entries.Add(AppointmentHistoryEntry.ForBooking(appointment, "desk", Now));
+        fixture.History.Entries.Add(new AppointmentHistoryEntry
+        {
+            AppointmentId = Guid.NewGuid(),
+            Action = AppointmentHistoryAction.Booked,
+            ToStatus = AppointmentStatus.Booked,
+            Actor = "another appointment",
+            OccurredAtUtc = Now
+        });
+
+        var history = await fixture.Service.GetHistoryAsync(appointment.AppointmentId);
+
+        Assert.NotNull(history);
+        Assert.Equal(
+            [AppointmentHistoryAction.Booked, AppointmentHistoryAction.Cancelled],
+            history.Select(entry => entry.Action));
+        var cancelled = history[1];
+        Assert.Equal(AppointmentStatus.Booked, cancelled.FromStatus);
+        Assert.Equal(AppointmentStatus.Cancelled, cancelled.ToStatus);
+        Assert.Equal(appointment.SlotId, cancelled.FromSlotId);
+        Assert.Equal("Travelling", cancelled.Reason);
+        Assert.Equal("patient", cancelled.Actor);
+        Assert.Equal(Now.AddHours(2), cancelled.OccurredAtUtc);
+    }
+
+    [Fact]
+    public async Task History_of_an_unknown_appointment_is_null_not_empty()
+    {
+        // Null becomes 404; an empty list would claim the appointment exists with no history.
+        var fixture = new Fixture();
+
+        Assert.Null(await fixture.Service.GetHistoryAsync(Guid.NewGuid()));
+    }
+
     private static AppointmentEntity Booked() => new()
     {
         SlotId = Guid.NewGuid(),
@@ -90,8 +142,11 @@ public sealed class AppointmentQueryServiceTests
         public Fixture(params AppointmentListing[] listings)
         {
             Repository = new FakeAppointmentRepository(listings);
-            Service = new AppointmentQueryService(Repository, new FixedTimeProvider(Now));
+            History = new FakeAppointmentHistoryRepository();
+            Service = new AppointmentQueryService(Repository, History, new FixedTimeProvider(Now));
         }
+
+        public FakeAppointmentHistoryRepository History { get; }
 
         public FakeAppointmentRepository Repository { get; }
 
@@ -137,7 +192,25 @@ public sealed class AppointmentQueryServiceTests
 
         public Task<AppointmentEntity?> GetByAppointmentIdAsync(
             Guid appointmentId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException("Not used by the list queries.");
+            Task.FromResult(_listings
+                .Select(listing => listing.Appointment)
+                .FirstOrDefault(appointment => appointment.AppointmentId == appointmentId));
+    }
+
+    private sealed class FakeAppointmentHistoryRepository : IAppointmentHistoryRepository
+    {
+        public List<AppointmentHistoryEntry> Entries { get; } = [];
+
+        public Task AddAsync(AppointmentHistoryEntry entry, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Queries never write.");
+
+        // Oldest first, as the real repository orders them.
+        public Task<IReadOnlyList<AppointmentHistoryEntry>> ListForAppointmentAsync(
+            Guid appointmentId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AppointmentHistoryEntry>>(Entries
+                .Where(entry => entry.AppointmentId == appointmentId)
+                .OrderBy(entry => entry.OccurredAtUtc)
+                .ToList());
     }
 
     private sealed class FixedTimeProvider : TimeProvider

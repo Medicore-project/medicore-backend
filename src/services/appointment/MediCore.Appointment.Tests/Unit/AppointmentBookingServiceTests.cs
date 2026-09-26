@@ -444,6 +444,42 @@ public sealed class AppointmentBookingServiceTests
         AssertNothingWasWritten(fixture, expectedSlotStatus: SlotStatus.Blocked);
     }
 
+    // ── SCRUM-36: history starts at the booking ──────────────────────────────
+
+    [Fact]
+    public async Task A_booking_starts_the_appointment_history_in_the_same_save()
+    {
+        var fixture = new Fixture(FreeSlot());
+
+        await fixture.Service.BookAsync(SlotId, PatientId, null, "desk@medicore.test", "corr-1");
+
+        var appointment = Assert.Single(fixture.Appointments.Added);
+        var entry = Assert.Single(fixture.History.Added);
+        Assert.Equal(appointment.AppointmentId, entry.AppointmentId);
+        Assert.Equal(AppointmentHistoryAction.Booked, entry.Action);
+        Assert.Null(entry.FromStatus);
+        Assert.Equal(AppointmentStatus.Booked, entry.ToStatus);
+        Assert.Null(entry.FromSlotId);
+        Assert.Equal(SlotId, entry.ToSlotId);
+        Assert.Equal(SlotStart, entry.ToStartUtc);
+        Assert.Equal("desk@medicore.test", entry.Actor);
+        Assert.Equal(Now, entry.OccurredAtUtc);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task A_lost_booking_leaves_no_history_behind()
+    {
+        // The entry is staged in the same transaction, so a rollback takes it with the appointment.
+        var fixture = new Fixture(FreeSlot());
+        fixture.UnitOfWork.Throw = new SlotAlreadyBookedException();
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.IsType<BookingSlotTakenResult>(result);
+        Assert.Empty(fixture.History.Added);
+    }
+
     // ── Reading one back ─────────────────────────────────────────────────────
 
     [Fact]
@@ -464,6 +500,7 @@ public sealed class AppointmentBookingServiceTests
     {
         Assert.Empty(fixture.Appointments.Added);
         Assert.Empty(fixture.Outbox.Added);
+        Assert.Empty(fixture.History.Added);
         Assert.Equal(0, fixture.UnitOfWork.SaveCount);
 
         if (fixture.Slots.Slot is not null)
@@ -511,18 +548,20 @@ public sealed class AppointmentBookingServiceTests
             Appointments = new FakeAppointmentRepository(existing);
             Doctors = new FakeDoctorCacheRepository();
             Outbox = new FakeOutboxMessageRepository();
+            History = new FakeAppointmentHistoryRepository();
             // A rolled-back attempt leaves nothing: what it staged disappears, as it would from
             // the database.
             UnitOfWork = new FakeUnitOfWork(Log, onRollback: () =>
             {
                 Appointments.Added.Clear();
                 Outbox.Added.Clear();
+                History.Added.Clear();
             });
             Slots.Log = Log;
             Appointments.Log = Log;
 
             Service = new AppointmentBookingService(
-                Appointments, Slots, Doctors, Outbox, UnitOfWork, new FixedTimeProvider(Now));
+                Appointments, Slots, Doctors, Outbox, History, UnitOfWork, new FixedTimeProvider(Now));
         }
 
         /// <summary>Every step of every attempt, in order, across the fakes.</summary>
@@ -535,6 +574,8 @@ public sealed class AppointmentBookingServiceTests
         public FakeDoctorCacheRepository Doctors { get; }
 
         public FakeOutboxMessageRepository Outbox { get; }
+
+        public FakeAppointmentHistoryRepository History { get; }
 
         public FakeUnitOfWork UnitOfWork { get; }
 
@@ -687,6 +728,21 @@ public sealed class AppointmentBookingServiceTests
 
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Booking commits through the unit of work.");
+    }
+
+    private sealed class FakeAppointmentHistoryRepository : IAppointmentHistoryRepository
+    {
+        public List<AppointmentHistoryEntry> Added { get; } = [];
+
+        public Task AddAsync(AppointmentHistoryEntry entry, CancellationToken cancellationToken = default)
+        {
+            Added.Add(entry);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<AppointmentHistoryEntry>> ListForAppointmentAsync(
+            Guid appointmentId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Booking never reads history.");
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

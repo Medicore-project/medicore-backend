@@ -144,6 +144,44 @@ public sealed class AppointmentModelTests
         Assert.Equal([typeof(Slot)], tokenOwners);
     }
 
+    [Fact]
+    public void History_maps_to_an_append_only_table_indexed_by_appointment_then_time()
+    {
+        // SCRUM-36. No soft-delete filter: nothing removes a history entry, so there is nothing
+        // to filter out.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentHistoryEntry));
+
+        Assert.NotNull(entityType);
+        Assert.Equal("appointment_history", entityType.GetTableName());
+        Assert.Equal(AppointmentDbContext.SchemaName, entityType.GetSchema());
+        Assert.Null(entityType.GetQueryFilter());
+        Assert.Null(entityType.FindProperty("IsDeleted"));
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ix_appointment_history_appointment_occurred");
+
+        Assert.False(index.IsUnique);
+        Assert.Equal(
+            [nameof(AppointmentHistoryEntry.AppointmentId), nameof(AppointmentHistoryEntry.OccurredAtUtc)],
+            index.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void History_columns_are_sized_to_what_they_hold()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentHistoryEntry))!;
+
+        // Statuses share the appointments.Status width, so any status fits either column.
+        Assert.Equal(20, entityType.FindProperty(nameof(AppointmentHistoryEntry.FromStatus))!.GetMaxLength());
+        Assert.Equal(20, entityType.FindProperty(nameof(AppointmentHistoryEntry.ToStatus))!.GetMaxLength());
+        Assert.Equal(500, entityType.FindProperty(nameof(AppointmentHistoryEntry.Reason))!.GetMaxLength());
+        Assert.Equal(100, entityType.FindProperty(nameof(AppointmentHistoryEntry.Actor))!.GetMaxLength());
+        Assert.True(entityType.FindProperty(nameof(AppointmentHistoryEntry.FromStatus))!.IsNullable);
+        Assert.False(entityType.FindProperty(nameof(AppointmentHistoryEntry.ToStatus))!.IsNullable);
+    }
+
     [Theory]
     [InlineData(ServiceCodes.GeneralConsultation)]
     [InlineData(ServiceCodes.SpecialistConsultation)]

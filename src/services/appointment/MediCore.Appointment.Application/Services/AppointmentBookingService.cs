@@ -21,6 +21,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
     private readonly ISlotRepository _slotRepository;
     private readonly IDoctorCacheRepository _doctorRepository;
     private readonly IOutboxMessageRepository _outboxRepository;
+    private readonly IAppointmentHistoryRepository _historyRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
 
@@ -29,6 +30,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         ISlotRepository slotRepository,
         IDoctorCacheRepository doctorRepository,
         IOutboxMessageRepository outboxRepository,
+        IAppointmentHistoryRepository historyRepository,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider)
     {
@@ -36,6 +38,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
         _slotRepository = slotRepository;
         _doctorRepository = doctorRepository;
         _outboxRepository = outboxRepository;
+        _historyRepository = historyRepository;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
     }
@@ -183,9 +186,15 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             AppointmentOutboxMessages.Booked(appointment, correlationId, nowUtc),
             cancellationToken);
 
-        // One save for the slot mutation, the appointment and the event row, inside the caller's
-        // transaction, so AC1 and AC4 of SCRUM-34 commit together or not at all — the
-        // transactional outbox. A lost race throws out of here and is handled by BookAsync.
+        // SCRUM-36: every appointment's history starts with the booking that created it.
+        await _historyRepository.AddAsync(
+            AppointmentHistoryEntry.ForBooking(appointment, actor, nowUtc),
+            cancellationToken);
+
+        // One save for the slot mutation, the appointment, the event row and the history entry,
+        // inside the caller's transaction, so AC1 and AC4 of SCRUM-34 commit together or not at
+        // all — the transactional outbox. A lost race throws out of here and is handled by
+        // BookAsync.
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new BookingCreatedResult(ToResponse(appointment));

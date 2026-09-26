@@ -13,11 +13,16 @@ public sealed class AppointmentQueryService : IAppointmentQueryService
     public const int UpcomingLimit = 20;
 
     private readonly IAppointmentRepository _repository;
+    private readonly IAppointmentHistoryRepository _historyRepository;
     private readonly TimeProvider _timeProvider;
 
-    public AppointmentQueryService(IAppointmentRepository repository, TimeProvider timeProvider)
+    public AppointmentQueryService(
+        IAppointmentRepository repository,
+        IAppointmentHistoryRepository historyRepository,
+        TimeProvider timeProvider)
     {
         _repository = repository;
+        _historyRepository = historyRepository;
         _timeProvider = timeProvider;
     }
 
@@ -68,6 +73,33 @@ public sealed class AppointmentQueryService : IAppointmentQueryService
                 listing.Appointment.DurationMinutes,
                 listing.Appointment.ServiceCode,
                 listing.Appointment.Status))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<AppointmentHistoryResponse>?> GetHistoryAsync(
+        Guid appointmentId,
+        CancellationToken cancellationToken = default)
+    {
+        // Checked first so "no such appointment" is a 404 rather than an empty history, which
+        // every real appointment has at least one entry of.
+        if (await _repository.GetByAppointmentIdAsync(appointmentId, cancellationToken) is null)
+        {
+            return null;
+        }
+
+        var entries = await _historyRepository.ListForAppointmentAsync(appointmentId, cancellationToken);
+
+        return entries.Select(entry => new AppointmentHistoryResponse(
+                entry.Action,
+                entry.FromStatus,
+                entry.ToStatus,
+                entry.FromSlotId,
+                entry.ToSlotId,
+                entry.FromStartUtc,
+                entry.ToStartUtc,
+                entry.Reason,
+                entry.Actor,
+                entry.OccurredAtUtc))
             .ToList();
     }
 }

@@ -78,3 +78,21 @@ public sealed record PatientAppointmentResponse(
     int DurationMinutes,
     string ServiceCode,
     string Status);
+
+/// <summary>
+/// One entry in an appointment's history: what changed, from what to what, who did it and when.
+/// </summary>
+/// <param name="Action">Booked, Rescheduled, Cancelled or Completed.</param>
+/// <param name="FromStatus">Null for the booking that created the appointment.</param>
+/// <param name="Reason">A cancellation's reason; null otherwise.</param>
+public sealed record AppointmentHistoryResponse(
+    string Action,
+    string? FromStatus,
+    string ToStatus,
+    Guid? FromSlotId,
+    Guid? ToSlotId,
+    DateTime? FromStartUtc,
+    DateTime? ToStartUtc,
+    string? Reason,
+    string Actor,
+    DateTime OccurredAtUtc);
