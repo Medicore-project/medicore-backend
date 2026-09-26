@@ -244,6 +244,80 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
         return new AppointmentChangedResult(AppointmentMapping.ToResponse(appointment));
     }
 
+    public Task<AppointmentChangeResult> CompleteAsync(
+        Guid appointmentId,
+        string notes,
+        AppointmentCaller caller,
+        string correlationId,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(
+            token => AttemptCompleteAsync(appointmentId, notes.Trim(), caller, correlationId, token),
+            cancellationToken);
+
+    private async Task<AppointmentChangeResult> AttemptCompleteAsync(
+        Guid appointmentId,
+        string notes,
+        AppointmentCaller caller,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
+        var appointment = await LockAppointmentAsync(appointmentId, caller, cancellationToken);
+        if (appointment is null)
+        {
+            return new AppointmentNotFoundResult();
+        }
+
+        // Before the status: another doctor learns nothing about this appointment's state. A
+        // caller with no staff id never matches, rather than matching everything.
+        if (caller.StaffId is null || caller.StaffId != appointment.DoctorId)
+        {
+            return new AppointmentNotYourAppointmentResult();
+        }
+
+        if (!AppointmentStatusTransitions.CanTransition(appointment.Status, AppointmentStatus.Completed))
+        {
+            return new AppointmentInvalidTransitionResult(appointment.Status, AppointmentHistoryAction.Completed);
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+
+        // From the start time on, not the end: a doctor finishes early as often as late, and the
+        // notes are written while the patient is still in the room.
+        if (nowUtc < appointment.StartUtc)
+        {
+            return new AppointmentNotStartedYetResult(appointment.StartUtc);
+        }
+
+        // The slot is not touched: the visit used the time, so it stays Booked, exactly as the
+        // NoShow status documents for a consumed slot.
+        var fromStatus = appointment.Status;
+        appointment.Status = AppointmentStatus.Completed;
+        appointment.UpdatedBy = caller.Actor;
+
+        // The notes go to the patient record on the event, not into this history, which every
+        // clinic role can read.
+        await _historyRepository.AddAsync(
+            new AppointmentHistoryEntry
+            {
+                AppointmentId = appointment.AppointmentId,
+                Action = AppointmentHistoryAction.Completed,
+                FromStatus = fromStatus,
+                ToStatus = appointment.Status,
+                FromSlotId = appointment.SlotId,
+                FromStartUtc = appointment.StartUtc,
+                Actor = caller.Actor,
+                OccurredAtUtc = nowUtc
+            },
+            cancellationToken);
+        await _outboxRepository.AddAsync(
+            AppointmentOutboxMessages.Completed(appointment, notes, correlationId, nowUtc),
+            cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new AppointmentChangedResult(AppointmentMapping.ToResponse(appointment));
+    }
+
     /// <summary>
     /// Runs one change as a bounded series of attempts, each in its own transaction — the same
     /// shape as <see cref="AppointmentBookingService.BookAsync"/>. A lost race on the slot row (or

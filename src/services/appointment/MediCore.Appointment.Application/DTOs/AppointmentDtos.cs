@@ -112,3 +112,10 @@ public sealed record CancelAppointmentRequest(string Reason);
 /// <summary>Moves a booked appointment to another slot with the same doctor.</summary>
 /// <param name="NewSlotId">The slot's business key, from the availability listing.</param>
 public sealed record RescheduleAppointmentRequest(Guid NewSlotId);
+
+/// <summary>Marks a booked appointment completed.</summary>
+/// <param name="Notes">
+/// The doctor's clinical notes. They travel on <c>appointment.completed</c> and become the
+/// patient's medical record entry for this visit. Required, at most 8000 characters.
+/// </param>
+public sealed record CompleteAppointmentRequest(string Notes);

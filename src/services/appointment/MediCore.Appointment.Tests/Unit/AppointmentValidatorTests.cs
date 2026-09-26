@@ -110,4 +110,31 @@ public sealed class AppointmentValidatorTests
         Assert.False(validator.Validate(new RescheduleAppointmentRequest(Guid.Empty)).IsValid);
         Assert.True(validator.Validate(new RescheduleAppointmentRequest(Guid.NewGuid())).IsValid);
     }
+
+    // ── SCRUM-36: complete ───────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void A_completion_needs_clinical_notes(string? notes)
+    {
+        // The Patient service dead-letters blank notes, so they are refused before the event exists.
+        var result = new CompleteAppointmentRequestValidator().Validate(new CompleteAppointmentRequest(notes!));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.PropertyName == nameof(CompleteAppointmentRequest.Notes));
+    }
+
+    [Fact]
+    public void Notes_may_reach_the_patient_services_limit_but_not_pass_it()
+    {
+        var validator = new CompleteAppointmentRequestValidator();
+        var longest = new string('x', 8_000);
+
+        Assert.Equal(8_000, CompleteAppointmentRequestValidator.MaxNotesLength);
+        Assert.True(validator.Validate(new CompleteAppointmentRequest(longest)).IsValid);
+        Assert.True(validator.Validate(new CompleteAppointmentRequest("  " + longest + "  ")).IsValid);
+        Assert.False(validator.Validate(new CompleteAppointmentRequest(longest + "x")).IsValid);
+    }
 }

@@ -95,7 +95,35 @@ public sealed class AppointmentAuthorizationPolicyTests
         Assert.Equal(expectedSuccess, result.Succeeded);
     }
 
+    [Theory]
+    [InlineData("Doctor", true)]
+    [InlineData("Admin", false)]
+    [InlineData("Receptionist", false)]
+    [InlineData("Nurse", false)]
+    public async Task Only_doctors_hold_the_appointment_completer_policy(string role, bool expectedSuccess)
+    {
+        // Completing writes clinical notes into the patient's record, so not even Admin.
+        var result = await AuthorizeAsync(role, AppointmentAuthorizationPolicies.AppointmentCompleter);
+
+        Assert.Equal(expectedSuccess, result.Succeeded);
+    }
+
     // ── Which policy each endpoint carries ────────────────────────────────────
+
+    [Theory]
+    [InlineData(nameof(AppointmentChangesController.Cancel), AppointmentAuthorizationPolicies.ScheduleManager)]
+    [InlineData(nameof(AppointmentChangesController.Reschedule), AppointmentAuthorizationPolicies.ScheduleManager)]
+    [InlineData(nameof(AppointmentChangesController.CancelMine), AppointmentAuthorizationPolicies.BookingHolder)]
+    [InlineData(nameof(AppointmentChangesController.RescheduleMine), AppointmentAuthorizationPolicies.BookingHolder)]
+    [InlineData(nameof(AppointmentChangesController.Complete), AppointmentAuthorizationPolicies.AppointmentCompleter)]
+    public void Each_appointment_change_endpoint_carries_its_policy(string methodName, string policy)
+    {
+        // The staff routes are front desk only; the mine routes answer only to a booking token;
+        // completion is the doctor's.
+        var attribute = Assert.Single(GetAuthorizeAttributes<AppointmentChangesController>(methodName));
+
+        Assert.Equal(policy, attribute.Policy);
+    }
 
     [Theory]
     [InlineData(nameof(DoctorLeavesController.Create))]

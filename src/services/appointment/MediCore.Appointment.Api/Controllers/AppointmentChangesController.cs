@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MediCore.Appointment.Api.Controllers;
 
 /// <summary>
-/// Changes to an existing appointment: cancel and reschedule (and, later in SCRUM-36, complete).
+/// Changes to an existing appointment: cancel, reschedule and complete.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,11 +20,14 @@ namespace MediCore.Appointment.Api.Controllers;
 /// any event row in one transaction.
 /// </para>
 /// <para>
-/// Each change has two routes. <c>{id}/…</c> is for front-desk staff and returns the appointment.
+/// Cancel and reschedule each have two routes. <c>{id}/…</c> is for front-desk staff and returns the appointment.
 /// <c>mine/{id}/…</c> is for a booking token, may only touch that token's own patient, and returns
 /// 204. The public DTOs never carry the patient or slot id, and the page reloads its list anyway.
 /// Two paths rather than one keeps the browser's booking-token routing unambiguous: a receptionist
 /// holding a patient's token must still send their staff token to <c>{id}/cancel</c>.
+/// </para>
+/// <para>
+/// Complete has one, for the appointment's own doctor.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -34,15 +37,18 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
 {
     private readonly IValidator<CancelAppointmentRequest> _cancelValidator;
     private readonly IValidator<RescheduleAppointmentRequest> _rescheduleValidator;
+    private readonly IValidator<CompleteAppointmentRequest> _completeValidator;
     private readonly IAppointmentLifecycleService _service;
 
     public AppointmentChangesController(
         IValidator<CancelAppointmentRequest> cancelValidator,
         IValidator<RescheduleAppointmentRequest> rescheduleValidator,
+        IValidator<CompleteAppointmentRequest> completeValidator,
         IAppointmentLifecycleService service)
     {
         _cancelValidator = cancelValidator;
         _rescheduleValidator = rescheduleValidator;
+        _completeValidator = completeValidator;
         _service = service;
     }
 
@@ -191,6 +197,45 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
         return ToActionResult(result);
     }
 
+    // ── PUT /api/appointments/{appointmentId}/complete ────────────────────────
+
+    /// <summary>
+    /// Marks a booked appointment completed and announces <c>appointment.completed</c>, which the
+    /// Patient service turns into a medical record entry carrying these notes.
+    /// </summary>
+    /// <remarks>
+    /// Only the appointment's own doctor (403 otherwise), and only from its start time (400
+    /// before). 409 when it is no longer booked. The slot stays booked.
+    /// </remarks>
+    [HttpPut("{appointmentId:guid}/complete")]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.AppointmentCompleter)]
+    [ProducesResponseType(typeof(AppointmentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Complete(
+        Guid appointmentId,
+        [FromBody] CompleteAppointmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await _completeValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return CreateValidationProblem(validation.Errors, "Completion request validation failed.");
+        }
+
+        var result = await _service.CompleteAsync(
+            appointmentId,
+            request.Notes,
+            new AppointmentCaller(CurrentActor(), StaffId: CurrentStaffId()),
+            CorrelationId(),
+            cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     /// <summary>Maps every change result to its status code, for all the change endpoints.</summary>
     private IActionResult ToActionResult(AppointmentChangeResult result) => result switch
     {
@@ -236,6 +281,14 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
         }),
         AppointmentPatientOverlapResult overlap => ConflictProblem(
             DescribeClash(overlap.ExistingStartUtc, overlap.ExistingEndUtc)),
+        AppointmentNotYourAppointmentResult => ForbiddenProblem(
+            "Only the appointment's own doctor can complete it."),
+        AppointmentNotStartedYetResult notStarted => BadRequest(new ProblemDetails
+        {
+            Title = $"This appointment starts at {ColomboTime.ToColombo(notStarted.StartUtc):HH:mm} on "
+                + $"{ColomboTime.ToColomboDate(notStarted.StartUtc):dd MMM yyyy} and cannot be completed before then.",
+            Status = StatusCodes.Status400BadRequest
+        }),
         AppointmentSlotTakenResult => ConflictProblem(
             "Someone booked this slot a moment ago, so the appointment was not moved. Please choose another."),
         _ => throw new InvalidOperationException("Unknown appointment change result.")

@@ -285,6 +285,78 @@ public sealed class AppointmentChangesControllerTests
         Assert.Equal("This appointment is Cancelled and can no longer be rescheduled.", ProblemOf(result).Title);
     }
 
+    // ── Complete ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_doctor_completes_as_themselves_with_their_notes()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(AppointmentStatus.Completed, Assert.IsType<AppointmentResponse>(ok.Value).Status);
+        var call = Assert.Single(service.Completions);
+        Assert.Equal("Seen.", call.Notes);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+        Assert.Equal("dr.perera@medicore.test", call.Caller.Actor);
+        Assert.Null(call.Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_completion_without_notes_never_reaches_the_service()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest(""), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Empty(service.Completions);
+    }
+
+    [Fact]
+    public async Task Someone_elses_appointment_is_403()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotYourAppointmentResult() };
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, StatusCodeOf(result));
+        Assert.Equal("Only the appointment's own doctor can complete it.", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Completing_before_the_start_is_400_naming_the_start_in_colombo_time()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotStartedYetResult(StartUtc) };
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment starts at 10:30 on 26 Sep 2026 and cannot be completed before then.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Completing_twice_is_409()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Completed, AppointmentHistoryAction.Completed)
+        };
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal("This appointment is Completed and can no longer be completed.", ProblemOf(result).Title);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static int? StatusCodeOf(IActionResult result) => result switch
@@ -304,6 +376,13 @@ public sealed class AppointmentChangesControllerTests
             new Claim(ClaimTypes.Email, "desk@medicore.test"),
             new Claim("staffId", StaffId.ToString()));
 
+    private static AppointmentChangesController DoctorController(IAppointmentLifecycleService service) =>
+        CreateController(
+            service,
+            new Claim(ClaimTypes.Role, "Doctor"),
+            new Claim(ClaimTypes.Email, "dr.perera@medicore.test"),
+            new Claim("staffId", StaffId.ToString()));
+
     private static AppointmentChangesController PatientController(IAppointmentLifecycleService service) =>
         CreateController(
             service,
@@ -321,6 +400,7 @@ public sealed class AppointmentChangesControllerTests
         return new AppointmentChangesController(
             new CancelAppointmentRequestValidator(),
             new RescheduleAppointmentRequestValidator(),
+            new CompleteAppointmentRequestValidator(),
             service)
         {
             ControllerContext = new ControllerContext { HttpContext = context }
@@ -334,6 +414,19 @@ public sealed class AppointmentChangesControllerTests
         public List<(Guid AppointmentId, string Reason, AppointmentCaller Caller)> Cancels { get; } = [];
 
         public List<(Guid AppointmentId, Guid NewSlotId, AppointmentCaller Caller)> Reschedules { get; } = [];
+
+        public List<(Guid AppointmentId, string Notes, AppointmentCaller Caller)> Completions { get; } = [];
+
+        public Task<AppointmentChangeResult> CompleteAsync(
+            Guid appointmentId,
+            string notes,
+            AppointmentCaller caller,
+            string correlationId,
+            CancellationToken cancellationToken = default)
+        {
+            Completions.Add((appointmentId, notes, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.Completed)));
+        }
 
         public Task<AppointmentChangeResult> RescheduleAsync(
             Guid appointmentId,

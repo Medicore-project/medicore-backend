@@ -69,6 +69,15 @@ public sealed record AppointmentPatientOverlapResult(
     DateTime ExistingEndUtc) : AppointmentChangeResult;
 
 /// <summary>
+/// Only the appointment's own doctor may complete it, and the caller is not that doctor — or has
+/// no staff id at all.
+/// </summary>
+public sealed record AppointmentNotYourAppointmentResult : AppointmentChangeResult;
+
+/// <summary>The appointment has not started yet, so it cannot have been completed.</summary>
+public sealed record AppointmentNotStartedYetResult(DateTime StartUtc) : AppointmentChangeResult;
+
+/// <summary>
 /// Someone else booked the slot a reschedule asked for while it was in flight. The reschedule
 /// rolled back, so the appointment is still on its original slot.
 /// </summary>
@@ -106,5 +115,17 @@ public interface IAppointmentLifecycleService
         Guid appointmentId,
         Guid newSlotId,
         AppointmentCaller caller,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks a booked appointment completed and announces <c>appointment.completed</c> with the
+    /// doctor's clinical notes. Only the appointment's own doctor may, and only once it has
+    /// started. The slot stays booked: the time was used.
+    /// </summary>
+    Task<AppointmentChangeResult> CompleteAsync(
+        Guid appointmentId,
+        string notes,
+        AppointmentCaller caller,
+        string correlationId,
         CancellationToken cancellationToken = default);
 }

@@ -140,6 +140,37 @@ public sealed class AppointmentOutboxMessagesTests
         Assert.Contains("\"reason\"", message.Payload);
     }
 
+    // ── SCRUM-36: appointment.completed ──────────────────────────────────────
+
+    [Fact]
+    public void A_completion_goes_to_the_same_topic_and_partition_as_its_booking()
+    {
+        var booked = AppointmentOutboxMessages.Booked(Appointment(), "corr-1", OccurredOnUtc);
+        var completed = AppointmentOutboxMessages.Completed(Appointment(), "Seen.", "corr-3", OccurredOnUtc);
+
+        Assert.Equal("appointment.completed", completed.EventType);
+        Assert.Equal(booked.Topic, completed.Topic);
+        Assert.Equal(booked.EventKey, completed.EventKey);
+    }
+
+    [Fact]
+    public void A_completion_is_shaped_as_the_patient_service_reads_it()
+    {
+        // camelCase with JsonSerializerDefaults.Web, version 1: what AppointmentEventProcessor
+        // deserializes and AppointmentCompletedHandler validates.
+        var message = AppointmentOutboxMessages.Completed(Appointment(), "Seen.", "corr-3", OccurredOnUtc);
+        var published = JsonSerializer.Deserialize<AppointmentCompletedEvent>(message.Payload, ReaderOptions)!;
+
+        Assert.Equal(message.MessageId, published.MessageId);
+        Assert.Equal(AppointmentId, published.AppointmentId);
+        Assert.Equal(PatientId, published.PatientId);
+        Assert.Equal("Seen.", published.Notes);
+        Assert.Equal(1, published.Version);
+        Assert.Equal(1, message.EventVersion);
+        Assert.Contains("\"patientId\"", message.Payload);
+        Assert.Contains("\"notes\"", message.Payload);
+    }
+
     private static AppointmentBookedEvent Deserialize(OutboxMessage message) =>
         JsonSerializer.Deserialize<AppointmentBookedEvent>(message.Payload, ReaderOptions)!;
 

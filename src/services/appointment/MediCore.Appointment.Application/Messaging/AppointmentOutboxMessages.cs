@@ -92,6 +92,39 @@ public static class AppointmentOutboxMessages
             occurredOnUtc);
     }
 
+    /// <summary>
+    /// One <c>appointment.completed</c> for a finished visit (SCRUM-36). The Patient service turns
+    /// it into a medical record entry, using <paramref name="notes"/> as the clinical notes and the
+    /// appointment id as the visit reference.
+    /// </summary>
+    /// <remarks>
+    /// That consumer dead-letters an event whose notes are blank or longer than 8000 characters,
+    /// or whose version is not 1, so the request validator enforces the same limits before the
+    /// row is ever written.
+    /// </remarks>
+    public static OutboxMessage Completed(
+        AppointmentEntity appointment,
+        string notes,
+        string correlationId,
+        DateTime occurredOnUtc)
+    {
+        var completedEvent = new AppointmentCompletedEvent
+        {
+            AppointmentId = appointment.AppointmentId,
+            PatientId = appointment.PatientId,
+            Notes = notes,
+            CorrelationId = correlationId,
+            OccurredAtUtc = occurredOnUtc
+        };
+
+        return ToOutboxMessage(
+            completedEvent,
+            appointment,
+            JsonSerializer.Serialize(completedEvent, SerializerOptions),
+            correlationId,
+            occurredOnUtc);
+    }
+
     /// <summary>The row every event after the booking is written as; see <see cref="Booked"/> for why each field is what it is.</summary>
     private static OutboxMessage ToOutboxMessage(
         IntegrationEvent integrationEvent,

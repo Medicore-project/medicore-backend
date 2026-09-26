@@ -27,6 +27,9 @@ public sealed class AppointmentLifecycleServiceTests
 
     private static readonly AppointmentCaller Desk = new("desk@medicore.test");
 
+    /// <summary>The appointment's own doctor.</summary>
+    private static readonly AppointmentCaller TreatingDoctor = new("dr.perera@medicore.test", StaffId: DoctorId);
+
     // ── Cancel: the happy path ───────────────────────────────────────────────
 
     [Fact]
@@ -660,6 +663,148 @@ public sealed class AppointmentLifecycleServiceTests
         var fixture = new Fixture();
 
         var result = await fixture.Service.RescheduleAsync(Guid.NewGuid(), NewSlotId, Desk);
+
+        Assert.IsType<AppointmentNotFoundResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
+    // ── Complete ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Completing_marks_the_visit_completed_keeps_the_slot_and_records_it()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-20);
+
+        var result = await fixture.Service.CompleteAsync(AppointmentId, "  Reviewed BP.  ", TreatingDoctor, "corr-1");
+
+        var changed = Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal(AppointmentStatus.Completed, changed.Appointment.Status);
+        Assert.Equal(AppointmentStatus.Completed, fixture.Appointment.Status);
+        Assert.Equal("dr.perera@medicore.test", fixture.Appointment.UpdatedBy);
+
+        // The visit used the time: the slot is neither released nor touched.
+        Assert.Equal(SlotStatus.Booked, fixture.Slot.Status);
+        Assert.Null(fixture.Slot.UpdatedBy);
+        Assert.Empty(fixture.Slots.Removed);
+
+        var entry = Assert.Single(fixture.History.Added);
+        Assert.Equal(AppointmentHistoryAction.Completed, entry.Action);
+        Assert.Equal(AppointmentStatus.Booked, entry.FromStatus);
+        Assert.Equal(AppointmentStatus.Completed, entry.ToStatus);
+        Assert.Equal("dr.perera@medicore.test", entry.Actor);
+        Assert.Null(entry.Reason); // the clinical notes stay out of the history
+
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+        Assert.Equal(1, fixture.UnitOfWork.Commits);
+    }
+
+    [Fact]
+    public async Task A_completion_carries_everything_the_patient_record_needs()
+    {
+        // AC4, checked against the rules the Patient service's handler dead-letters on: non-empty
+        // message, appointment and patient ids, non-blank notes of at most 8000, version 1.
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-20);
+
+        await fixture.Service.CompleteAsync(AppointmentId, "  Reviewed BP.  ", TreatingDoctor, "corr-1");
+
+        var message = Assert.Single(fixture.Outbox.Added);
+        Assert.Equal("appointment.completed", message.EventType);
+        Assert.Equal("appointment-events", message.Topic);
+        Assert.Equal(AppointmentId.ToString(), message.EventKey);
+
+        var published = JsonSerializer.Deserialize<AppointmentCompletedEvent>(
+            message.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        Assert.NotEqual(Guid.Empty, published.MessageId);
+        Assert.Equal(message.MessageId, published.MessageId);
+        Assert.Equal(AppointmentId, published.AppointmentId);
+        Assert.Equal(PatientId, published.PatientId);
+        Assert.Equal("Reviewed BP.", published.Notes);
+        Assert.Equal(1, published.Version);
+        Assert.Equal("corr-1", published.CorrelationId);
+        Assert.Equal(Now, published.OccurredAtUtc);
+    }
+
+    [Fact]
+    public async Task Completing_locks_the_appointment_and_never_reads_the_slot()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-20);
+
+        await fixture.Service.CompleteAsync(AppointmentId, "Reviewed BP.", TreatingDoctor, "corr-1");
+
+        Assert.Equal(["begin", $"lock appointment {AppointmentId}", "save", "commit"], fixture.Log);
+    }
+
+    [Fact]
+    public async Task A_visit_can_be_completed_from_its_start_time_but_not_before()
+    {
+        var atStart = new Fixture();
+        atStart.Appointment.StartUtc = Now;
+        var early = new Fixture();
+        early.Appointment.StartUtc = Now.AddMinutes(1);
+
+        var atStartResult = await atStart.Service.CompleteAsync(AppointmentId, "Seen.", TreatingDoctor, "corr-1");
+        var earlyResult = await early.Service.CompleteAsync(AppointmentId, "Seen.", TreatingDoctor, "corr-1");
+
+        Assert.IsType<AppointmentChangedResult>(atStartResult);
+        Assert.Equal(new AppointmentNotStartedYetResult(Now.AddMinutes(1)), earlyResult);
+        AssertNothingChanged(early);
+    }
+
+    [Theory]
+    [InlineData("1111111a-1111-1111-1111-111111111111")] // another doctor
+    [InlineData(null)] // a staff account with no staff profile
+    public async Task Only_the_appointments_own_doctor_can_complete_it(string? staffId)
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-20);
+        var caller = new AppointmentCaller("someone@medicore.test", StaffId: staffId is null ? null : Guid.Parse(staffId));
+
+        var result = await fixture.Service.CompleteAsync(AppointmentId, "Seen.", caller, "corr-1");
+
+        Assert.IsType<AppointmentNotYourAppointmentResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task Another_doctor_learns_nothing_about_the_appointments_status()
+    {
+        // Ownership is checked before the status, so a cancelled appointment of someone else's
+        // answers "not yours", not "cancelled".
+        var fixture = new Fixture();
+        fixture.Appointment.Status = AppointmentStatus.Cancelled;
+        var otherDoctor = new AppointmentCaller("other@medicore.test", StaffId: OtherDoctorId);
+
+        var result = await fixture.Service.CompleteAsync(AppointmentId, "Seen.", otherDoctor, "corr-1");
+
+        Assert.IsType<AppointmentNotYourAppointmentResult>(result);
+    }
+
+    [Theory]
+    [InlineData(AppointmentStatus.Cancelled)]
+    [InlineData(AppointmentStatus.Completed)]
+    [InlineData(AppointmentStatus.NoShow)]
+    public async Task Only_a_booked_appointment_can_be_completed(string status)
+    {
+        // Completing twice would give the patient two medical record entries for one visit.
+        var fixture = new Fixture();
+        fixture.Appointment.Status = status;
+        fixture.Appointment.StartUtc = Now.AddMinutes(-20);
+
+        var result = await fixture.Service.CompleteAsync(AppointmentId, "Seen.", TreatingDoctor, "corr-1");
+
+        Assert.Equal(new AppointmentInvalidTransitionResult(status, AppointmentHistoryAction.Completed), result);
+        AssertNothingChanged(fixture, expectedStatus: status);
+    }
+
+    [Fact]
+    public async Task Completing_an_unknown_appointment_is_not_found()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.CompleteAsync(Guid.NewGuid(), "Seen.", TreatingDoctor, "corr-1");
 
         Assert.IsType<AppointmentNotFoundResult>(result);
         AssertNothingChanged(fixture);
