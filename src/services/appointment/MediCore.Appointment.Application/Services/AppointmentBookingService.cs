@@ -3,8 +3,6 @@ using MediCore.Appointment.Application.DTOs;
 using MediCore.Appointment.Application.Entities;
 using MediCore.Appointment.Application.Exceptions;
 using MediCore.Appointment.Application.Interfaces;
-using MediCore.Appointment.Application.Messaging;
-using AppointmentEntity = MediCore.Appointment.Application.Entities.Appointment;
 
 namespace MediCore.Appointment.Application.Services;
 
@@ -164,33 +162,17 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             return new BookingPatientOverlapResult(clash.AppointmentId, clash.StartUtc, clash.EndUtc);
         }
 
-        slot.Status = SlotStatus.Booked;
-        slot.UpdatedBy = actor;
-
-        var appointment = new AppointmentEntity
-        {
-            SlotId = slot.SlotId,
-            PatientId = patientId,
-            PatientNumber = patientDetails?.PatientNumber,
-            PatientName = patientDetails?.PatientName,
-            DoctorId = slot.DoctorId,
-            StartUtc = slot.StartUtc,
-            EndUtc = slot.EndUtc,
-            SlotDate = slot.SlotDate,
-            DurationMinutes = slot.DurationMinutes,
-            ServiceCode = serviceCode ?? ServiceCodes.GeneralConsultation,
-            Status = AppointmentStatus.Booked,
-            CreatedBy = actor
-        };
-
-        await _appointmentRepository.AddAsync(appointment, cancellationToken);
-        await _outboxRepository.AddAsync(
-            AppointmentOutboxMessages.Booked(appointment, correlationId, nowUtc),
-            cancellationToken);
-
-        // SCRUM-36: every appointment's history starts with the booking that created it.
-        await _historyRepository.AddAsync(
-            AppointmentHistoryEntry.ForBooking(appointment, actor, nowUtc),
+        var appointment = await AppointmentCreation.CreateAsync(
+            slot,
+            patientId,
+            patientDetails,
+            serviceCode,
+            actor,
+            correlationId,
+            nowUtc,
+            _appointmentRepository,
+            _outboxRepository,
+            _historyRepository,
             cancellationToken);
 
         // One save for the slot mutation, the appointment, the event row and the history entry,
