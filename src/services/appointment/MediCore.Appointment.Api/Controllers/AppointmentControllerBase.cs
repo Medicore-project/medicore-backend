@@ -2,6 +2,7 @@ using System.Security.Claims;
 using FluentValidation.Results;
 using MediCore.Appointment.Api.Authorization;
 using MediCore.Appointment.Application.DTOs;
+using MediCore.Appointment.Application.Entities;
 using MediCore.Appointment.Application.Scheduling;
 using Microsoft.AspNetCore.Mvc;
 
@@ -117,6 +118,16 @@ public abstract class AppointmentControllerBase : ControllerBase
         + $"{ColomboTime.ToColomboDate(existingStartUtc):dd MMM yyyy} from "
         + $"{ColomboTime.ToColombo(existingStartUtc):HH:mm} to "
         + $"{ColomboTime.ToColombo(existingEndUtc):HH:mm}.";
+
+    /// <summary>
+    /// The 409 title for a slot that is no longer <c>Available</c>. A slot held for the waitlist is
+    /// described in words: "it is Offered" would mean nothing to a patient, and would read as if
+    /// the slot were being offered to them.
+    /// </summary>
+    protected static string DescribeUnavailableSlot(string currentStatus) =>
+        currentStatus == SlotStatus.Offered
+            ? "This slot is no longer available; it is being held for a patient on the waitlist."
+            : $"This slot is no longer available; it is {currentStatus}.";
 
     /// <summary>Builds a 403 with a human-readable title.</summary>
     protected IActionResult ForbiddenProblem(string title) =>
