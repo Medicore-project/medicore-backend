@@ -21,6 +21,7 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
     private readonly IDoctorCacheRepository _doctorRepository;
     private readonly IOutboxMessageRepository _outboxRepository;
     private readonly IAppointmentHistoryRepository _historyRepository;
+    private readonly IWaitlistOfferer _waitlistOfferer;
     private readonly IUnitOfWork _unitOfWork;
     private readonly TimeProvider _timeProvider;
     private readonly CancellationPolicyOptions _cancellationPolicy;
@@ -31,6 +32,7 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
         IDoctorCacheRepository doctorRepository,
         IOutboxMessageRepository outboxRepository,
         IAppointmentHistoryRepository historyRepository,
+        IWaitlistOfferer waitlistOfferer,
         IUnitOfWork unitOfWork,
         TimeProvider timeProvider,
         IOptions<CancellationPolicyOptions> cancellationPolicy)
@@ -40,6 +42,7 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
         _doctorRepository = doctorRepository;
         _outboxRepository = outboxRepository;
         _historyRepository = historyRepository;
+        _waitlistOfferer = waitlistOfferer;
         _unitOfWork = unitOfWork;
         _timeProvider = timeProvider;
         _cancellationPolicy = cancellationPolicy.Value;
@@ -82,7 +85,7 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
             return new AppointmentInsideCancellationWindowResult(WindowHours, appointment.StartUtc);
         }
 
-        ReleaseSlot(
+        var released = ReleaseSlot(
             await _slotRepository.GetTrackedBySlotIdAsync(appointment.SlotId, cancellationToken),
             caller.Actor);
 
@@ -108,8 +111,10 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
             AppointmentOutboxMessages.Cancelled(appointment, reason, correlationId, nowUtc),
             cancellationToken);
 
+        await OfferToWaitlistAsync(released, nowUtc, caller.Actor, cancellationToken);
+
         // One save: the appointment, the released slot, the history entry and the event row
-        // commit together or not at all.
+        // commit together or not at all — and so does any waitlist offer of the slot.
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AppointmentChangedResult(AppointmentMapping.ToResponse(appointment));
@@ -220,7 +225,7 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
             OccurredAtUtc = nowUtc
         };
 
-        ReleaseSlot(oldSlot, caller.Actor);
+        var released = ReleaseSlot(oldSlot, caller.Actor);
 
         newSlot.Status = SlotStatus.Booked;
         newSlot.UpdatedBy = caller.Actor;
@@ -234,9 +239,11 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
 
         await _historyRepository.AddAsync(entry, cancellationToken);
 
-        // One save for both slots, the appointment and the history entry. If the new slot was
-        // taken in the meantime, its token or ux_appointments_slot throws out of here, the
-        // transaction rolls back, and the appointment is still on its original slot (AC1).
+        await OfferToWaitlistAsync(released, nowUtc, caller.Actor, cancellationToken);
+
+        // One save for both slots, the appointment, the history entry and any waitlist offer. If
+        // the new slot was taken in the meantime, its token or ux_appointments_slot throws out of
+        // here, the transaction rolls back, and the appointment is still on its original slot (AC1).
         // No event: nothing downstream consumes a reschedule yet, and adding one is a contract
         // change for every team (see the SCRUM-36 decisions).
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -395,17 +402,38 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
     /// would mean the slot and the appointment disagree, and the slot is left as it is rather than
     /// guessed at.
     /// </remarks>
-    private void ReleaseSlot(Slot? slot, string actor)
+    /// <returns>The slot when it has become available again; null otherwise.</returns>
+    private Slot? ReleaseSlot(Slot? slot, string actor)
     {
         switch (slot?.Status)
         {
             case SlotStatus.Booked:
                 slot.Status = SlotStatus.Available;
                 slot.UpdatedBy = actor;
-                break;
+                return slot;
             case SlotStatus.Flagged:
                 _slotRepository.RemoveRange([slot]);
-                break;
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// SCRUM-37 AC2. A slot this change released goes to the front of its day's waitlist before
+    /// the save, so it is never publicly bookable in between. A removed Flagged slot is not
+    /// offered — it is outside the doctor's hours — and neither is anything when nobody waits.
+    /// Taken last, after every other lock this change holds, as the lock order requires.
+    /// </summary>
+    private async Task OfferToWaitlistAsync(
+        Slot? released,
+        DateTime nowUtc,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        if (released is not null)
+        {
+            await _waitlistOfferer.OfferAsync(released, nowUtc, actor, cancellationToken);
         }
     }
 }
