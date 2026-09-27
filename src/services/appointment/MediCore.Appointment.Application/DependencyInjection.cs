@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<IWaitlistOfferer, WaitlistOfferer>();
         services.AddScoped<IWaitlistChangeService, WaitlistChangeService>();
+        services.AddScoped<IWaitlistSweeper, WaitlistSweeper>();
 
         // Injected into application services so tests can pin "now" without touching the clock.
         services.AddSingleton(TimeProvider.System);

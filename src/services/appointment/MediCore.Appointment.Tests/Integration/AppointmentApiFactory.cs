@@ -24,6 +24,7 @@ namespace MediCore.Appointment.Tests.Integration;
 /// <para>
 /// Kafka is switched off by blanking <c>Kafka:BootstrapServers</c>, so the staff-events consumer is
 /// not registered. Doctor data is put in the cache through the same handler the consumer calls.
+/// The waitlist sweeper is switched off the same way, by a zero interval.
 /// </para>
 /// </remarks>
 public sealed class AppointmentApiFactory : WebApplicationFactory<Program>
@@ -32,6 +33,9 @@ public sealed class AppointmentApiFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Development");
         builder.UseSetting("Kafka:BootstrapServers", string.Empty);
+
+        // SCRUM-37: no background waitlist sweep, so nothing changes rows under a test.
+        builder.UseSetting("Appointments:Waitlist:SweepIntervalSeconds", "0");
     }
 
     /// <summary>A client carrying a bearer token for <paramref name="role"/>.</summary>
