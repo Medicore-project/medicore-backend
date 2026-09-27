@@ -49,12 +49,32 @@ public interface IWaitlistService
     /// <summary>One entry, or null if there is none.</summary>
     Task<WaitlistEntryResponse?> GetAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The doctor's clinic days between two Colombo dates, each marked full or not, for the public
+    /// booking page to offer the waitlist on a full day. Defaults to today through the slot
+    /// horizon, and never looks outside it.
+    /// </summary>
+    Task<WaitlistDaysResult> GetDaysAsync(
+        Guid doctorId,
+        DateOnly? from,
+        DateOnly? to,
+        CancellationToken cancellationToken = default);
+
     /// <summary>How far back <see cref="GetMineAsync"/> shows closed entries.</summary>
     const int RecentlyClosedDays = 30;
 
     /// <summary>The <see cref="ListAsync"/> status filter meaning "waiting or offered".</summary>
     const string ActiveFilter = "Active";
 }
+
+/// <summary>The doctor's days, or that the doctor is not bookable.</summary>
+public abstract record WaitlistDaysResult;
+
+/// <summary>Every day in range with a clinic, soonest first.</summary>
+public sealed record WaitlistDaysFoundResult(IReadOnlyList<PublicBookingDayResponse> Days) : WaitlistDaysResult;
+
+/// <summary>The doctor is unknown or no longer bookable.</summary>
+public sealed record WaitlistDaysDoctorNotFoundResult : WaitlistDaysResult;
 
 /// <summary>The outcome of joining a waitlist. The controller picks the status code.</summary>
 public abstract record WaitlistJoinResult;

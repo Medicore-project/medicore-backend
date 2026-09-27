@@ -8,7 +8,8 @@ namespace MediCore.Appointment.Api.Controllers;
 
 /// <summary>
 /// The reads the public booking page needs before anyone has identified themselves: which
-/// specializations the clinic offers, which doctors practise them, and when those doctors are free.
+/// specializations the clinic offers, which doctors practise them, when those doctors are free,
+/// and which of their days are full.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -33,13 +34,16 @@ public sealed class PublicBookingController : AppointmentControllerBase
 {
     private readonly IDoctorDirectoryService _doctorDirectory;
     private readonly ISlotService _slotService;
+    private readonly IWaitlistService _waitlist;
 
     public PublicBookingController(
         IDoctorDirectoryService doctorDirectory,
-        ISlotService slotService)
+        ISlotService slotService,
+        IWaitlistService waitlist)
     {
         _doctorDirectory = doctorDirectory;
         _slotService = slotService;
+        _waitlist = waitlist;
     }
 
     // ── GET /api/public/booking/specializations ───────────────────────────────
@@ -131,6 +135,53 @@ public sealed class PublicBookingController : AppointmentControllerBase
                 .ToList()),
             AvailableSlotsDoctorNotFoundResult => DoctorNotFoundProblem(),
             _ => throw new InvalidOperationException("Unknown available slots result.")
+        };
+    }
+
+    // ── GET /api/public/booking/days ──────────────────────────────────────────
+
+    /// <summary>
+    /// The doctor's clinic days, each marked full or not (SCRUM-37). <c>from</c> and <c>to</c> are
+    /// Asia/Colombo dates, default to today through the slot horizon, and are clamped to it.
+    /// </summary>
+    /// <remarks>
+    /// Lets the booking page tell a full day, which can be waited for, from a day the doctor does
+    /// not work, which cannot — the free-slot listing alone shows both as empty. Says only whether
+    /// a day is full: no counts, and nothing about who holds the times.
+    /// </remarks>
+    [HttpGet("days")]
+    [ProducesResponseType(typeof(IReadOnlyList<PublicBookingDayResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDays(
+        [FromQuery] Guid doctorId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken)
+    {
+        if (doctorId == Guid.Empty)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "A doctorId is required.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        if (from is not null && to is not null && from > to)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "The 'from' date must not be after the 'to' date.",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        return await _waitlist.GetDaysAsync(doctorId, from, to, cancellationToken) switch
+        {
+            WaitlistDaysFoundResult found => Ok(found.Days),
+            WaitlistDaysDoctorNotFoundResult => DoctorNotFoundProblem(),
+            _ => throw new InvalidOperationException("Unknown waitlist days result.")
         };
     }
 }

@@ -331,6 +331,62 @@ public sealed class WaitlistServiceTests
         Assert.Null(await fixture.Service.GetAsync(Guid.NewGuid()));
     }
 
+    // ── Days, for the public booking page ────────────────────────────────────
+
+    [Fact]
+    public async Task Days_are_marked_full_or_not_and_come_soonest_first()
+    {
+        var fixture = new Fixture();
+        fixture.Waitlist.Days.Clear();
+        fixture.Waitlist.Days[Day.AddDays(1)] = new DayAvailability(Day.AddDays(1), Free: 3, Taken: 2);
+        fixture.Waitlist.Days[Day] = new DayAvailability(Day, Free: 0, Taken: 12);
+
+        var result = await fixture.Service.GetDaysAsync(DoctorId, null, null);
+
+        var days = Assert.IsType<WaitlistDaysFoundResult>(result).Days;
+        Assert.Equal([new PublicBookingDayResponse(Day, true), new PublicBookingDayResponse(Day.AddDays(1), false)], days);
+    }
+
+    [Fact]
+    public async Task Days_default_to_today_through_the_horizon_and_never_look_past_it()
+    {
+        var fixture = new Fixture(horizonDays: 60);
+
+        await fixture.Service.GetDaysAsync(DoctorId, Today.AddDays(-10), Today.AddDays(400));
+
+        Assert.Equal((Today, Today.AddDays(60)), fixture.Waitlist.DaysAskedFor);
+    }
+
+    [Fact]
+    public async Task A_range_inside_the_horizon_is_used_as_given()
+    {
+        var fixture = new Fixture();
+
+        await fixture.Service.GetDaysAsync(DoctorId, Day, Day.AddDays(6));
+
+        Assert.Equal((Day, Day.AddDays(6)), fixture.Waitlist.DaysAskedFor);
+    }
+
+    [Fact]
+    public async Task A_range_wholly_outside_the_horizon_is_empty_without_a_query()
+    {
+        var fixture = new Fixture(horizonDays: 60);
+
+        var result = await fixture.Service.GetDaysAsync(DoctorId, Today.AddDays(70), Today.AddDays(80));
+
+        Assert.Empty(Assert.IsType<WaitlistDaysFoundResult>(result).Days);
+        Assert.Null(fixture.Waitlist.DaysAskedFor);
+    }
+
+    [Fact]
+    public async Task Days_for_a_doctor_who_is_not_bookable_are_refused()
+    {
+        var fixture = new Fixture();
+        fixture.Doctors.Active.Clear();
+
+        Assert.IsType<WaitlistDaysDoctorNotFoundResult>(await fixture.Service.GetDaysAsync(DoctorId, null, null));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WaitlistEntry Entry(
@@ -382,6 +438,7 @@ public sealed class WaitlistServiceTests
         public HashSet<(Guid PatientId, Guid DoctorId, DateOnly Date)> Booked { get; } = [];
         public List<string> Log { get; } = [];
         public DateOnly? CountedFrom { get; private set; }
+        public (DateOnly From, DateOnly To)? DaysAskedFor { get; private set; }
         public DateTime? ClosedSince { get; private set; }
         public IReadOnlyCollection<string>? ListedStatuses { get; private set; }
 
@@ -428,6 +485,7 @@ public sealed class WaitlistServiceTests
             Guid doctorId, DateOnly from, DateOnly to, DateTime nowUtc, CancellationToken cancellationToken = default)
         {
             Log.Add("read day");
+            DaysAskedFor = (from, to);
             IReadOnlyList<DayAvailability> days = Days.Values
                 .Where(day => day.Date >= from && day.Date <= to)
                 .ToList();

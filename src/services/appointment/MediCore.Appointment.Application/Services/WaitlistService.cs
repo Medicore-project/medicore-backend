@@ -200,6 +200,40 @@ public sealed class WaitlistService : IWaitlistService
             : (await WithPlacesAsync([listing], cancellationToken))[0];
     }
 
+    public async Task<WaitlistDaysResult> GetDaysAsync(
+        Guid doctorId,
+        DateOnly? from,
+        DateOnly? to,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _doctorRepository.GetActiveAsync(doctorId, cancellationToken) is null)
+        {
+            return new WaitlistDaysDoctorNotFoundResult();
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var today = ColomboTime.ToColomboDate(nowUtc);
+        var horizon = today.AddDays(_schedulingOptions.SlotHorizonDays);
+
+        // Clamped to what exists: nothing before today is bookable, nothing past the horizon is
+        // generated yet. An anonymous caller cannot make this scan more than the horizon.
+        var start = from is { } requestedFrom && requestedFrom > today ? requestedFrom : today;
+        var end = to is { } requestedTo && requestedTo < horizon ? requestedTo : horizon;
+
+        if (start > end)
+        {
+            return new WaitlistDaysFoundResult([]);
+        }
+
+        var days = await _waitlistRepository.GetDayAvailabilityAsync(
+            doctorId, start, end, nowUtc, cancellationToken);
+
+        return new WaitlistDaysFoundResult(days
+            .OrderBy(day => day.Date)
+            .Select(day => new PublicBookingDayResponse(day.Date, day.IsFull))
+            .ToList());
+    }
+
     /// <summary>
     /// Maps listings to responses with each waiting entry's place in line. One read of the waiting
     /// positions covers every queue in the list; a list with nobody waiting needs none.
