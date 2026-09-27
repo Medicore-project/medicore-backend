@@ -125,6 +125,22 @@ public sealed class WaitlistRepository : IWaitlistRepository
         return days.Select(day => new DayAvailability(day.Date, day.Free, day.Taken)).ToList();
     }
 
+    public async Task<IReadOnlyList<WaitlistEntry>> GetWaitingTrackedAsync(
+        Guid doctorId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        // Served by ix_waitlist_entries_queue. Tracked: the offerer changes the one it picks, and
+        // may withdraw some it passes over.
+        return await _dbContext.WaitlistEntries
+            .Where(entry =>
+                entry.DoctorId == doctorId
+                && entry.SlotDate == date
+                && entry.Status == WaitlistStatus.Waiting)
+            .OrderBy(entry => entry.Position)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default)
     {
         return _dbContext.WaitlistEntries.AddAsync(entry, cancellationToken).AsTask();

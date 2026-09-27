@@ -83,6 +83,15 @@ public interface IWaitlistRepository
         DateTime nowUtc,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The queue's waiting entries, tracked, first in line first — the candidates for an offer.
+    /// Call with the queue lock held.
+    /// </summary>
+    Task<IReadOnlyList<WaitlistEntry>> GetWaitingTrackedAsync(
+        Guid doctorId,
+        DateOnly date,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stages a new entry for insertion (not yet committed).</summary>
     Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default);
 

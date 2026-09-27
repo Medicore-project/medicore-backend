@@ -434,6 +434,10 @@ public sealed class WaitlistServiceTests
             return Task.FromResult(days);
         }
 
+        public Task<IReadOnlyList<WaitlistEntry>> GetWaitingTrackedAsync(
+            Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Joining and reading never pick a candidate for an offer.");
+
         public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default)
         {
             Log.Add("add");
