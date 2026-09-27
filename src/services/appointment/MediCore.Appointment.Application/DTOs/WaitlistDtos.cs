@@ -53,3 +53,12 @@ public sealed record PatientWaitlistEntryResponse(
     Guid? AppointmentId,
     DateTime? ClosedAtUtc,
     string? ClosedReason);
+
+/// <summary>
+/// Joins a doctor's waitlist for one day. <c>PatientId</c> is for front-desk staff only; a booking
+/// token supplies the patient from its claim, and any value here is then ignored.
+/// </summary>
+public sealed record JoinWaitlistRequest(Guid DoctorId, DateOnly Date, Guid? PatientId, string? ServiceCode);
+
+/// <summary>Takes an entry off the waitlist. The reason is optional and kept on the entry.</summary>
+public sealed record RemoveWaitlistEntryRequest(string? Reason);

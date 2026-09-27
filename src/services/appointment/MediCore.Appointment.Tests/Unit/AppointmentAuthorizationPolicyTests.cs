@@ -295,6 +295,38 @@ public sealed class AppointmentAuthorizationPolicyTests
             .Where(method => method.GetCustomAttribute<AllowAnonymousAttribute>() is not null));
     }
 
+    // ── SCRUM-37: the waitlist ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(nameof(WaitlistController.Join), AppointmentAuthorizationPolicies.BookingCreator)]
+    [InlineData(nameof(WaitlistController.Mine), AppointmentAuthorizationPolicies.BookingHolder)]
+    [InlineData(nameof(WaitlistController.AcceptMine), AppointmentAuthorizationPolicies.BookingHolder)]
+    [InlineData(nameof(WaitlistController.DeclineMine), AppointmentAuthorizationPolicies.BookingHolder)]
+    [InlineData(nameof(WaitlistController.LeaveMine), AppointmentAuthorizationPolicies.BookingHolder)]
+    [InlineData(nameof(WaitlistController.List), AppointmentAuthorizationPolicies.ScheduleReader)]
+    [InlineData(nameof(WaitlistController.GetById), AppointmentAuthorizationPolicies.ScheduleReader)]
+    [InlineData(nameof(WaitlistController.Accept), AppointmentAuthorizationPolicies.ScheduleManager)]
+    [InlineData(nameof(WaitlistController.Decline), AppointmentAuthorizationPolicies.ScheduleManager)]
+    [InlineData(nameof(WaitlistController.Remove), AppointmentAuthorizationPolicies.ScheduleManager)]
+    public void Each_waitlist_endpoint_carries_its_policy(string methodName, string policy)
+    {
+        // Patients answer only through mine/…; answering for someone else is the front desk's.
+        var attribute = Assert.Single(GetAuthorizeAttributes<WaitlistController>(methodName));
+
+        Assert.Equal(policy, attribute.Policy);
+    }
+
+    [Fact]
+    public void The_waitlist_is_not_anonymous()
+    {
+        // The gateway does not authenticate. The queues name patients, and an anonymous accept
+        // would book appointments for whoever guessed an entry id.
+        Assert.NotNull(typeof(WaitlistController).GetCustomAttribute<AuthorizeAttribute>());
+        Assert.Empty(typeof(WaitlistController)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(method => method.GetCustomAttribute<AllowAnonymousAttribute>() is not null));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static IReadOnlyList<AuthorizeAttribute> GetAuthorizeAttributes<TController>(string methodName) =>
