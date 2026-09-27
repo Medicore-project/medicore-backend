@@ -333,10 +333,10 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
             {
                 var result = await _unitOfWork.ExecuteInTransactionAsync(attempt, cancellationToken);
 
-                // A retry that now finds the new slot Booked lost the race it was retrying, and
-                // says so in the race's words, as booking does.
+                // A retry that now finds the new slot Booked (or held for the waitlist) lost the
+                // race it was retrying, and says so in the race's words, as booking does.
                 return attemptNumber > 1
-                    && result is AppointmentNewSlotNotAvailableResult { CurrentStatus: SlotStatus.Booked }
+                    && result is AppointmentNewSlotNotAvailableResult { CurrentStatus: SlotStatus.Booked or SlotStatus.Offered }
                     ? new AppointmentSlotTakenResult()
                     : result;
             }

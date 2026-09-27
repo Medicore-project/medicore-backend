@@ -358,6 +358,21 @@ public sealed class AppointmentBookingServiceTests
     }
 
     [Fact]
+    public async Task A_retry_that_finds_the_slot_held_for_the_waitlist_reports_it_taken()
+    {
+        // SCRUM-37. The waitlist sweeper offered the slot to the front of its queue between our
+        // read and our save. To this caller that is the same as someone else booking it.
+        var fixture = new Fixture(FreeSlot());
+        fixture.Slots.Rereads.Enqueue(SlotIn(SlotStatus.Offered));
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        var result = await fixture.Service.BookAsync(SlotId, PatientId, null, "desk", "corr-1");
+
+        Assert.IsType<BookingSlotTakenResult>(result);
+        Assert.Empty(fixture.Appointments.Added);
+    }
+
+    [Fact]
     public async Task A_retry_books_the_slot_when_it_is_still_free()
     {
         // The row changed but the slot is still Available: retrying is what lets this caller win

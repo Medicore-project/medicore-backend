@@ -31,4 +31,14 @@ public static class SlotStatus
     /// for a receptionist to reschedule.
     /// </summary>
     public const string Flagged = "Flagged";
+
+    /// <summary>
+    /// Held for the patient at the front of a waitlist (SCRUM-37). A released slot goes straight
+    /// from <see cref="Booked"/> to this status in the same save as the cancellation, so it never
+    /// shows as bookable to anyone else. Every reader that looks for <see cref="Available"/> —
+    /// the slot lists, booking, reschedule, block — therefore passes it over without knowing about
+    /// waitlists. It returns to <see cref="Available"/> when the queue runs out, or to
+    /// <see cref="Booked"/> when the offer is accepted.
+    /// </summary>
+    public const string Offered = "Offered";
 }

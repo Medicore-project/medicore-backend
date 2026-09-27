@@ -81,8 +81,10 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
                     cancellationToken);
 
                 // A retry that now finds the slot Booked is the loser of the race it was retrying,
-                // so it says so in the race's words rather than as a plain status.
-                return attempt > 1 && result is BookingSlotNotAvailableResult { CurrentStatus: SlotStatus.Booked }
+                // so it says so in the race's words rather than as a plain status. Offered too: the
+                // waitlist sweeper took the slot for the patient at the front of its queue.
+                return attempt > 1
+                    && result is BookingSlotNotAvailableResult { CurrentStatus: SlotStatus.Booked or SlotStatus.Offered }
                     ? new BookingSlotTakenResult()
                     : result;
             }

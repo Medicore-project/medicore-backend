@@ -438,6 +438,20 @@ public sealed class AppointmentLifecycleServiceTests
     }
 
     [Fact]
+    public async Task A_new_slot_held_for_the_waitlist_between_our_read_and_our_save_is_reported_taken()
+    {
+        // SCRUM-37. The waitlist sweeper offered the new slot to someone in its queue.
+        var fixture = new Fixture();
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+        fixture.UnitOfWork.BetweenAttempts = () => fixture.NewSlot.Status = SlotStatus.Offered;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentSlotTakenResult>(result);
+        AssertStillOnTheOriginalSlot(fixture);
+    }
+
+    [Fact]
     public async Task A_lost_race_that_leaves_the_new_slot_free_moves_the_appointment_on_the_retry()
     {
         // The token only says the row changed — a harmless write, say. The retry finds it free.
