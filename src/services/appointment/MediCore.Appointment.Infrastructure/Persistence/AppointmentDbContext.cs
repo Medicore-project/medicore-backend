@@ -17,6 +17,7 @@ public sealed class AppointmentDbContext : DbContext
     public DbSet<DoctorSchedule> DoctorSchedules => Set<DoctorSchedule>();
     public DbSet<Slot> Slots => Set<Slot>();
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
+    public DbSet<AppointmentHistoryEntry> AppointmentHistory => Set<AppointmentHistoryEntry>();
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
     public DbSet<DoctorLeave> DoctorLeaves => Set<DoctorLeave>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

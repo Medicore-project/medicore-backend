@@ -2,6 +2,7 @@ using System.Security.Claims;
 using FluentValidation.Results;
 using MediCore.Appointment.Api.Authorization;
 using MediCore.Appointment.Application.DTOs;
+using MediCore.Appointment.Application.Scheduling;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Appointment.Api.Controllers;
@@ -105,6 +106,17 @@ public abstract class AppointmentControllerBase : ControllerBase
             Title = "Doctor not found or not bookable.",
             Status = StatusCodes.Status404NotFound
         });
+
+    /// <summary>
+    /// SCRUM-34 AC3 asks the clash to be explained, so the existing appointment's window is spelled
+    /// out in Colombo time — the form the patient recognises, since UTC would be five and a half
+    /// hours off what they were told. Shared by booking and rescheduling.
+    /// </summary>
+    protected static string DescribeClash(DateTime existingStartUtc, DateTime existingEndUtc) =>
+        $"This patient already has an appointment on "
+        + $"{ColomboTime.ToColomboDate(existingStartUtc):dd MMM yyyy} from "
+        + $"{ColomboTime.ToColombo(existingStartUtc):HH:mm} to "
+        + $"{ColomboTime.ToColombo(existingEndUtc):HH:mm}.";
 
     /// <summary>Builds a 403 with a human-readable title.</summary>
     protected IActionResult ForbiddenProblem(string title) =>

@@ -86,6 +86,83 @@ public sealed class OutboxProcessorTests
         Assert.Equal(1, fixture.Repository.SaveCount);
     }
 
+    // ── SCRUM-36: one appointment's events stay in order ─────────────────────
+
+    [Fact]
+    public async Task A_cancellation_never_overtakes_a_booking_that_failed_to_publish()
+    {
+        // The ticket's ordering note. Both share the appointment's key, so the broker keeps them
+        // in order only if they reach it in order.
+        var appointmentKey = Guid.NewGuid().ToString();
+        var booked = Row(new DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc), appointmentKey, "appointment.booked");
+        var cancelled = Row(new DateTime(2026, 9, 23, 9, 5, 0, DateTimeKind.Utc), appointmentKey, "appointment.cancelled");
+        var fixture = new Fixture(booked, cancelled);
+        fixture.Publisher.FailFor = booked.MessageId;
+
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+
+        Assert.Empty(fixture.Publisher.Published);
+        Assert.Null(booked.ProcessedOnUtc);
+        Assert.Equal(1, booked.RetryCount);
+        // Held back, not failed: it was never attempted, so it carries no retry and no error.
+        Assert.Null(cancelled.ProcessedOnUtc);
+        Assert.Equal(0, cancelled.RetryCount);
+        Assert.Null(cancelled.Error);
+    }
+
+    [Fact]
+    public async Task The_held_back_event_follows_its_booking_on_the_next_pass()
+    {
+        var appointmentKey = Guid.NewGuid().ToString();
+        var booked = Row(new DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc), appointmentKey, "appointment.booked");
+        var cancelled = Row(new DateTime(2026, 9, 23, 9, 5, 0, DateTimeKind.Utc), appointmentKey, "appointment.cancelled");
+        var fixture = new Fixture(booked, cancelled);
+        fixture.Publisher.FailFor = booked.MessageId;
+
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+        fixture.Publisher.FailFor = null;
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+
+        Assert.Equal([booked.MessageId, cancelled.MessageId], fixture.Publisher.Published);
+        Assert.NotNull(booked.ProcessedOnUtc);
+        Assert.NotNull(cancelled.ProcessedOnUtc);
+    }
+
+    [Fact]
+    public async Task Every_later_event_of_that_appointment_waits_but_other_appointments_do_not()
+    {
+        // Booked, rescheduled-then-cancelled, completed... all held behind the one that failed.
+        var appointmentKey = Guid.NewGuid().ToString();
+        var booked = Row(new DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc), appointmentKey, "appointment.booked");
+        var otherAppointment = Row(new DateTime(2026, 9, 23, 9, 1, 0, DateTimeKind.Utc));
+        var cancelled = Row(new DateTime(2026, 9, 23, 9, 2, 0, DateTimeKind.Utc), appointmentKey, "appointment.cancelled");
+        var completed = Row(new DateTime(2026, 9, 23, 9, 3, 0, DateTimeKind.Utc), appointmentKey, "appointment.completed");
+        var fixture = new Fixture(booked, otherAppointment, cancelled, completed);
+        fixture.Publisher.FailFor = booked.MessageId;
+
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+
+        Assert.Equal([otherAppointment.MessageId], fixture.Publisher.Published);
+        Assert.Null(cancelled.ProcessedOnUtc);
+        Assert.Null(completed.ProcessedOnUtc);
+    }
+
+    [Fact]
+    public async Task A_later_failure_does_not_hold_back_what_came_before_it()
+    {
+        // Only what follows a failure waits; the booking ahead of a failed cancellation is sent.
+        var appointmentKey = Guid.NewGuid().ToString();
+        var booked = Row(new DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc), appointmentKey, "appointment.booked");
+        var cancelled = Row(new DateTime(2026, 9, 23, 9, 5, 0, DateTimeKind.Utc), appointmentKey, "appointment.cancelled");
+        var fixture = new Fixture(booked, cancelled);
+        fixture.Publisher.FailFor = cancelled.MessageId;
+
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+
+        Assert.Equal([booked.MessageId], fixture.Publisher.Published);
+        Assert.Equal(1, cancelled.RetryCount);
+    }
+
     [Fact]
     public async Task An_empty_outbox_writes_nothing()
     {
@@ -120,12 +197,15 @@ public sealed class OutboxProcessorTests
         Assert.Equal([older.MessageId, newer.MessageId], fixture.Publisher.Published);
     }
 
-    private static OutboxMessage Row(DateTime? occurredOnUtc = null) => new()
+    private static OutboxMessage Row(
+        DateTime? occurredOnUtc = null,
+        string? eventKey = null,
+        string eventType = "appointment.booked") => new()
     {
         MessageId = Guid.NewGuid(),
         Topic = AppointmentOutboxMessages.Topic,
-        EventKey = Guid.NewGuid().ToString(),
-        EventType = "appointment.booked",
+        EventKey = eventKey ?? Guid.NewGuid().ToString(),
+        EventType = eventType,
         CorrelationId = Guid.NewGuid().ToString(),
         Payload = "{}",
         OccurredOnUtc = occurredOnUtc ?? new DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc)

@@ -208,7 +208,8 @@ public sealed class AppointmentsController : AppointmentControllerBase
                 Title = "That appointment time has already passed. Please choose a later slot.",
                 Status = StatusCodes.Status400BadRequest
             }),
-            BookingPatientOverlapResult overlap => ConflictProblem(DescribeClash(overlap)),
+            BookingPatientOverlapResult overlap => ConflictProblem(
+                DescribeClash(overlap.ExistingStartUtc, overlap.ExistingEndUtc)),
             BookingSlotTakenResult => ConflictProblem(
                 "Someone booked this slot a moment ago. Please choose another."),
             BookingContendedResult => ConflictProblem(
@@ -232,14 +233,21 @@ public sealed class AppointmentsController : AppointmentControllerBase
         return appointment is null ? NotFound() : Ok(appointment);
     }
 
+    // ── GET /api/appointments/{appointmentId}/history ─────────────────────────
+
     /// <summary>
-    /// SCRUM-34 AC3 asks the clash to be explained, so the existing appointment's window is spelled
-    /// out in Colombo time — the form the patient recognises, since UTC would be five and a half
-    /// hours off what they were told.
+    /// Every change to one appointment, oldest first: the booking, then each reschedule,
+    /// cancellation or completion, with who made it and when.
     /// </summary>
-    private static string DescribeClash(BookingPatientOverlapResult overlap) =>
-        $"This patient already has an appointment on "
-        + $"{ColomboTime.ToColomboDate(overlap.ExistingStartUtc):dd MMM yyyy} from "
-        + $"{ColomboTime.ToColombo(overlap.ExistingStartUtc):HH:mm} to "
-        + $"{ColomboTime.ToColombo(overlap.ExistingEndUtc):HH:mm}.";
+    [HttpGet("{appointmentId:guid}/history")]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.ScheduleReader)]
+    [ProducesResponseType(typeof(IReadOnlyList<AppointmentHistoryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetHistory(Guid appointmentId, CancellationToken cancellationToken)
+    {
+        var history = await _queries.GetHistoryAsync(appointmentId, cancellationToken);
+        return history is null ? NotFound() : Ok(history);
+    }
 }

@@ -28,3 +28,57 @@ public sealed class BookAppointmentRequestValidator : AbstractValidator<BookAppo
             .When(r => r.ServiceCode is not null);
     }
 }
+
+/// <summary>Validates a <see cref="CancelAppointmentRequest"/>.</summary>
+/// <remarks>
+/// Only the body. Whether this appointment may be cancelled at all — its status, the cancellation
+/// window — needs the row and a clock, so the lifecycle service decides it.
+/// </remarks>
+public sealed class CancelAppointmentRequestValidator : AbstractValidator<CancelAppointmentRequest>
+{
+    /// <summary>The <c>appointment_history.Reason</c> column's width.</summary>
+    public const int MaxReasonLength = 500;
+
+    public CancelAppointmentRequestValidator()
+    {
+        RuleFor(r => r.Reason)
+            .Must(reason => !string.IsNullOrWhiteSpace(reason))
+            .WithMessage("A reason for the cancellation is required.")
+            .Must(reason => reason is null || reason.Trim().Length <= MaxReasonLength)
+            .WithMessage($"The reason must be at most {MaxReasonLength} characters.");
+    }
+}
+
+/// <summary>Validates a <see cref="RescheduleAppointmentRequest"/>.</summary>
+/// <remarks>
+/// Only that a slot is named. Whether it is free, in the future, the same doctor's and clear of the
+/// patient's other appointments needs the rows, so the lifecycle service decides.
+/// </remarks>
+public sealed class RescheduleAppointmentRequestValidator : AbstractValidator<RescheduleAppointmentRequest>
+{
+    public RescheduleAppointmentRequestValidator()
+    {
+        RuleFor(r => r.NewSlotId).NotEmpty();
+    }
+}
+
+/// <summary>Validates a <see cref="CompleteAppointmentRequest"/>.</summary>
+/// <remarks>
+/// The same rules the Patient service applies when it consumes <c>appointment.completed</c>: notes
+/// non-blank and at most 8000 characters once trimmed. Checking them here is what keeps a
+/// completion from being accepted by this service and then dead-lettered by that one.
+/// </remarks>
+public sealed class CompleteAppointmentRequestValidator : AbstractValidator<CompleteAppointmentRequest>
+{
+    /// <summary>The Patient service's limit on clinical notes.</summary>
+    public const int MaxNotesLength = 8_000;
+
+    public CompleteAppointmentRequestValidator()
+    {
+        RuleFor(r => r.Notes)
+            .Must(notes => !string.IsNullOrWhiteSpace(notes))
+            .WithMessage("Clinical notes are required to complete an appointment.")
+            .Must(notes => notes is null || notes.Trim().Length <= MaxNotesLength)
+            .WithMessage($"Clinical notes must be at most {MaxNotesLength} characters.");
+    }
+}

@@ -93,6 +93,18 @@ public static class AppointmentAuthorizationPolicies
     public const string BookingHolder = "BookingHolder";
 
     /// <summary>
+    /// Mark an appointment completed, with the clinical notes that become the patient's medical
+    /// record entry.
+    /// </summary>
+    /// <remarks>
+    /// Doctor-only, and not merely by role: the lifecycle service additionally requires the
+    /// caller's <c>staffId</c> claim to be the appointment's <c>DoctorId</c>, so a doctor can
+    /// complete only their own visits. Admin is excluded on purpose — completing writes clinical
+    /// notes into the patient's record, and those must be the treating doctor's.
+    /// </remarks>
+    public const string AppointmentCompleter = "AppointmentCompleter";
+
+    /// <summary>
     /// The claim a booking token carries, naming the single patient it can book for. Minted by the
     /// Patient service's identify and public-register endpoints, signed with the symmetric key
     /// every service shares. A staff token never carries it.
@@ -119,6 +131,7 @@ public static class AppointmentAuthorizationPolicies
             .AddPolicy(LeaveManager, policy => policy.RequireRole("Doctor"))
             .AddPolicy(LeaveReader, policy => policy.RequireRole("Admin", "Doctor"))
             .AddPolicy(LeaveApprover, policy => policy.RequireRole("Admin"))
+            .AddPolicy(AppointmentCompleter, policy => policy.RequireRole("Doctor"))
             .AddPolicy(BookingCreator, policy => policy.RequireAssertion(context =>
                 context.User.IsInRole("Admin")
                 || context.User.IsInRole("Receptionist")

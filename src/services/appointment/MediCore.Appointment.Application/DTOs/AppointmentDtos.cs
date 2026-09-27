@@ -67,9 +67,14 @@ public sealed record AppointmentSummaryResponse(
 /// <remarks>
 /// Reduced on purpose, like the other public DTOs: no patient id, no slot id, no audit columns. The
 /// caller already knows who they are; what they need is with whom and when.
+/// <para>
+/// <c>DoctorId</c> was added in SCRUM-36 so the page can list that doctor's free times for a
+/// reschedule. It reveals nothing new: the public doctor listing already publishes every id.
+/// </para>
 /// </remarks>
 public sealed record PatientAppointmentResponse(
     Guid AppointmentId,
+    Guid DoctorId,
     string? DoctorName,
     string? Specialization,
     DateTime StartUtc,
@@ -78,3 +83,39 @@ public sealed record PatientAppointmentResponse(
     int DurationMinutes,
     string ServiceCode,
     string Status);
+
+/// <summary>
+/// One entry in an appointment's history: what changed, from what to what, who did it and when.
+/// </summary>
+/// <param name="Action">Booked, Rescheduled, Cancelled or Completed.</param>
+/// <param name="FromStatus">Null for the booking that created the appointment.</param>
+/// <param name="Reason">A cancellation's reason; null otherwise.</param>
+public sealed record AppointmentHistoryResponse(
+    string Action,
+    string? FromStatus,
+    string ToStatus,
+    Guid? FromSlotId,
+    Guid? ToSlotId,
+    DateTime? FromStartUtc,
+    DateTime? ToStartUtc,
+    string? Reason,
+    string Actor,
+    DateTime OccurredAtUtc);
+
+/// <summary>Cancels a booked appointment.</summary>
+/// <param name="Reason">
+/// Why — recorded in the appointment history and carried on <c>appointment.cancelled</c>.
+/// Required, at most 500 characters.
+/// </param>
+public sealed record CancelAppointmentRequest(string Reason);
+
+/// <summary>Moves a booked appointment to another slot with the same doctor.</summary>
+/// <param name="NewSlotId">The slot's business key, from the availability listing.</param>
+public sealed record RescheduleAppointmentRequest(Guid NewSlotId);
+
+/// <summary>Marks a booked appointment completed.</summary>
+/// <param name="Notes">
+/// The doctor's clinical notes. They travel on <c>appointment.completed</c> and become the
+/// patient's medical record entry for this visit. Required, at most 8000 characters.
+/// </param>
+public sealed record CompleteAppointmentRequest(string Notes);

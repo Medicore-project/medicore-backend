@@ -50,6 +50,7 @@ public sealed class AppointmentRepository : IAppointmentRepository
         Guid patientId,
         DateTime startUtc,
         DateTime endUtc,
+        Guid? excludeAppointmentId = null,
         CancellationToken cancellationToken = default)
     {
         // Half-open intervals: strict comparisons on both sides, so an appointment ending exactly
@@ -61,7 +62,8 @@ public sealed class AppointmentRepository : IAppointmentRepository
                 appointment.PatientId == patientId
                 && appointment.Status == AppointmentStatus.Booked
                 && appointment.StartUtc < endUtc
-                && appointment.EndUtc > startUtc)
+                && appointment.EndUtc > startUtc
+                && appointment.AppointmentId != excludeAppointmentId)
             .OrderBy(appointment => appointment.StartUtc)
             .FirstOrDefaultAsync(cancellationToken);
     }
@@ -153,5 +155,24 @@ public sealed class AppointmentRepository : IAppointmentRepository
             .SingleOrDefaultAsync(
                 appointment => appointment.AppointmentId == appointmentId,
                 cancellationToken);
+    }
+
+    /// <summary>A compile-time constant: nothing but the bound id varies.</summary>
+    internal const string LockAppointmentSql =
+        "SELECT * FROM " + AppointmentDbContext.SchemaName + ".appointments "
+        + "WHERE \"AppointmentId\" = {0} FOR UPDATE";
+
+    public Task<AppointmentEntity?> GetTrackedForUpdateAsync(
+        Guid appointmentId,
+        CancellationToken cancellationToken = default)
+    {
+        // Raw SQL only for FOR UPDATE, which LINQ cannot express. The schema is a constant and the
+        // id is bound as a parameter. EF wraps this as a subquery to apply the soft-delete filter,
+        // and Postgres allows FOR UPDATE there.
+        return _dbContext.Appointments
+            .FromSqlRaw(
+                LockAppointmentSql,
+                appointmentId)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 }
