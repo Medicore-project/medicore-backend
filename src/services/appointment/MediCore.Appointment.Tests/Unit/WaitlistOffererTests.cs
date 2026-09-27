@@ -415,6 +415,12 @@ public sealed class WaitlistOffererTests
         public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Offering never adds to a queue.");
 
+        public Task<WaitlistEntry?> GetByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Offering is handed its entries.");
+
+        public Task<WaitlistEntry?> GetTrackedByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Offering is handed its entries.");
+
         public Task<WaitlistListing?> GetListingAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Offering never reads listings.");
 

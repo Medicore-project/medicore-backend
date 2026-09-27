@@ -92,6 +92,15 @@ public interface IWaitlistRepository
         DateOnly date,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// One entry, untracked — to learn whose it is and which queue to lock before reading it for
+    /// real with <see cref="GetTrackedByEntryIdAsync"/>.
+    /// </summary>
+    Task<WaitlistEntry?> GetByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default);
+
+    /// <summary>One entry, tracked. Call with the queue lock held, so what it reads is current.</summary>
+    Task<WaitlistEntry?> GetTrackedByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default);
+
     /// <summary>Stages a new entry for insertion (not yet committed).</summary>
     Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default);
 

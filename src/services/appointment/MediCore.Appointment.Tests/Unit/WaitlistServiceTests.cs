@@ -434,6 +434,12 @@ public sealed class WaitlistServiceTests
             return Task.FromResult(days);
         }
 
+        public Task<WaitlistEntry?> GetByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Joining and reading never change an existing entry.");
+
+        public Task<WaitlistEntry?> GetTrackedByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Joining and reading never change an existing entry.");
+
         public Task<IReadOnlyList<WaitlistEntry>> GetWaitingTrackedAsync(
             Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Joining and reading never pick a candidate for an offer.");

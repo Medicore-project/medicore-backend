@@ -141,6 +141,23 @@ public sealed class WaitlistRepository : IWaitlistRepository
             .ToListAsync(cancellationToken);
     }
 
+    public Task<WaitlistEntry?> GetByEntryIdAsync(
+        Guid waitlistEntryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.WaitlistEntries
+            .AsNoTracking()
+            .SingleOrDefaultAsync(entry => entry.WaitlistEntryId == waitlistEntryId, cancellationToken);
+    }
+
+    public Task<WaitlistEntry?> GetTrackedByEntryIdAsync(
+        Guid waitlistEntryId,
+        CancellationToken cancellationToken = default)
+    {
+        return _dbContext.WaitlistEntries
+            .SingleOrDefaultAsync(entry => entry.WaitlistEntryId == waitlistEntryId, cancellationToken);
+    }
+
     public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default)
     {
         return _dbContext.WaitlistEntries.AddAsync(entry, cancellationToken).AsTask();
