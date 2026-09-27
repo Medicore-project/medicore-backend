@@ -507,6 +507,28 @@ public sealed class WaitlistChangeServiceTests
             Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Passing on is the offerer's.");
 
+        public Task<IReadOnlyList<WaitlistEntry>> GetActiveTrackedAsync(
+            Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetTrackedOfferedForSlotsAsync(
+            IReadOnlyCollection<Guid> slotIds, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetLapsedOffersAsync(
+            DateTime nowUtc, int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<Slot>> GetOrphanedOfferedSlotsAsync(
+            int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<bool> HasOpenOfferForSlotAsync(Guid slotId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<WaitlistQueue>> GetActiveQueuesAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
         public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Answers never add to a queue.");
 

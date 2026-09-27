@@ -141,6 +141,82 @@ public sealed class WaitlistRepository : IWaitlistRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<WaitlistEntry>> GetActiveTrackedAsync(
+        Guid doctorId,
+        DateOnly date,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.WaitlistEntries
+            .Where(entry =>
+                entry.DoctorId == doctorId
+                && entry.SlotDate == date
+                && (entry.Status == WaitlistStatus.Waiting || entry.Status == WaitlistStatus.Offered))
+            .OrderBy(entry => entry.Position)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<WaitlistEntry>> GetTrackedOfferedForSlotsAsync(
+        IReadOnlyCollection<Guid> slotIds,
+        CancellationToken cancellationToken = default)
+    {
+        // Served by ux_waitlist_entries_offered_slot.
+        return await _dbContext.WaitlistEntries
+            .Where(entry =>
+                entry.Status == WaitlistStatus.Offered
+                && entry.OfferedSlotId != null
+                && slotIds.Contains(entry.OfferedSlotId.Value))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<WaitlistEntry>> GetLapsedOffersAsync(
+        DateTime nowUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        // Served by ix_waitlist_entries_offer_expiry.
+        return await _dbContext.WaitlistEntries
+            .AsNoTracking()
+            .Where(entry => entry.Status == WaitlistStatus.Offered && entry.OfferExpiresAtUtc <= nowUtc)
+            .OrderBy(entry => entry.OfferExpiresAtUtc)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Slot>> GetOrphanedOfferedSlotsAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        // Served by ix_slots_status_start; normally empty.
+        return await _dbContext.Slots
+            .AsNoTracking()
+            .Where(slot =>
+                slot.Status == SlotStatus.Offered
+                && !_dbContext.WaitlistEntries.Any(entry =>
+                    entry.Status == WaitlistStatus.Offered && entry.OfferedSlotId == slot.SlotId))
+            .OrderBy(slot => slot.StartUtc)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> HasOpenOfferForSlotAsync(Guid slotId, CancellationToken cancellationToken = default)
+    {
+        return _dbContext.WaitlistEntries.AnyAsync(
+            entry => entry.Status == WaitlistStatus.Offered && entry.OfferedSlotId == slotId,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<WaitlistQueue>> GetActiveQueuesAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.WaitlistEntries
+            .AsNoTracking()
+            .Where(entry => entry.Status == WaitlistStatus.Waiting || entry.Status == WaitlistStatus.Offered)
+            .Select(entry => new { entry.DoctorId, entry.SlotDate })
+            .Distinct()
+            .OrderBy(queue => queue.SlotDate)
+            .Select(queue => new WaitlistQueue(queue.DoctorId, queue.SlotDate))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<WaitlistEntry?> GetByEntryIdAsync(
         Guid waitlistEntryId,
         CancellationToken cancellationToken = default)

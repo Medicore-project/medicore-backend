@@ -66,6 +66,14 @@ public sealed class WaitlistOfferer : IWaitlistOfferer
 
         foreach (var entry in waiting)
         {
+            // The query ran in the database, but EF hands back the tracked copy of any entry this
+            // unit of work already holds. One offered a moment ago in the same transaction still
+            // reads Waiting there, and must not be offered a second slot.
+            if (entry.Status != WaitlistStatus.Waiting)
+            {
+                continue;
+            }
+
             if (await _waitlistRepository.HasBookedWithDoctorOnAsync(
                     entry.PatientId, slot.DoctorId, slot.SlotDate, cancellationToken))
             {

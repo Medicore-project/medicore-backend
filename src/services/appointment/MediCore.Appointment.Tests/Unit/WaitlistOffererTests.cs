@@ -97,6 +97,22 @@ public sealed class WaitlistOffererTests
     }
 
     [Fact]
+    public async Task An_entry_offered_earlier_in_the_same_transaction_is_not_offered_again()
+    {
+        // The database still says Waiting until the save; EF hands back the tracked copy, which
+        // already says Offered. The sweep offering two free slots on one day relies on this.
+        var fixture = new Fixture();
+        var alreadyOffered = fixture.Add(1, WaitlistStatus.Offered);
+        fixture.Waitlist.StillWaitingInTheDatabase.Add(alreadyOffered);
+        var next = fixture.Add(2, WaitlistStatus.Waiting);
+
+        var offered = await fixture.OfferAsync();
+
+        Assert.Same(next, offered);
+        Assert.NotEqual(fixture.Slot.SlotId, alreadyOffered.OfferedSlotId);
+    }
+
+    [Fact]
     public async Task A_patient_already_booked_with_the_doctor_that_day_is_withdrawn_and_passed_over()
     {
         // Booked some other way while waiting — or it was their own cancellation that freed this.
@@ -377,6 +393,12 @@ public sealed class WaitlistOffererTests
         public HashSet<Guid> Booked { get; } = [];
         public List<string> Log { get; } = [];
 
+        /// <summary>
+        /// Entries the database query would still return as waiting although their tracked copy has
+        /// moved on — an offer made earlier in the same, not yet saved, transaction.
+        /// </summary>
+        public List<WaitlistEntry> StillWaitingInTheDatabase { get; } = [];
+
         public Task LockQueueAsync(Guid doctorId, DateOnly date, CancellationToken cancellationToken = default)
         {
             Log.Add("lock queue");
@@ -389,7 +411,7 @@ public sealed class WaitlistOffererTests
             Log.Add("read waiting");
             IReadOnlyList<WaitlistEntry> waiting = Entries
                 .Where(entry => entry.DoctorId == doctorId && entry.SlotDate == date
-                    && entry.Status == WaitlistStatus.Waiting)
+                    && (entry.Status == WaitlistStatus.Waiting || StillWaitingInTheDatabase.Contains(entry)))
                 .OrderBy(entry => entry.Position)
                 .ToList();
             return Task.FromResult(waiting);
@@ -411,6 +433,28 @@ public sealed class WaitlistOffererTests
         public Task<IReadOnlyList<DayAvailability>> GetDayAvailabilityAsync(
             Guid doctorId, DateOnly from, DateOnly to, DateTime nowUtc, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Offering works from one slot, not a day.");
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetActiveTrackedAsync(
+            Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetTrackedOfferedForSlotsAsync(
+            IReadOnlyCollection<Guid> slotIds, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetLapsedOffersAsync(
+            DateTime nowUtc, int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<Slot>> GetOrphanedOfferedSlotsAsync(
+            int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<bool> HasOpenOfferForSlotAsync(Guid slotId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
+
+        public Task<IReadOnlyList<WaitlistQueue>> GetActiveQueuesAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Only the sweeper and schedule revision use this.");
 
         public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Offering never adds to a queue.");

@@ -14,6 +14,9 @@ public sealed record WaitlistListing(
     DateTime? OfferedStartUtc,
     DateTime? OfferedEndUtc);
 
+/// <summary>One doctor's day that has somebody waiting in it, or holding an offer from it.</summary>
+public sealed record WaitlistQueue(Guid DoctorId, DateOnly SlotDate);
+
 /// <summary>One waiting entry's place in the queue order, for working out places in line.</summary>
 public sealed record WaitingPosition(Guid DoctorId, DateOnly SlotDate, int Position);
 
@@ -100,6 +103,43 @@ public interface IWaitlistRepository
 
     /// <summary>One entry, tracked. Call with the queue lock held, so what it reads is current.</summary>
     Task<WaitlistEntry?> GetTrackedByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The queue's active entries — waiting and offered — tracked, in position order. For closing
+    /// a queue that can no longer be served. Call with the queue lock held.
+    /// </summary>
+    Task<IReadOnlyList<WaitlistEntry>> GetActiveTrackedAsync(
+        Guid doctorId,
+        DateOnly date,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Open offers holding any of the given slots, tracked. Schedule revision uses this to put the
+    /// patient back in line before it deletes a slot they were offered.
+    /// </summary>
+    Task<IReadOnlyList<WaitlistEntry>> GetTrackedOfferedForSlotsAsync(
+        IReadOnlyCollection<Guid> slotIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Open offers whose expiry is at or before <paramref name="nowUtc"/>, oldest first, untracked.</summary>
+    Task<IReadOnlyList<WaitlistEntry>> GetLapsedOffersAsync(
+        DateTime nowUtc,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Slots held as <see cref="SlotStatus.Offered"/> that no open offer points at, untracked. They
+    /// would otherwise stay hidden from the public list for ever.
+    /// </summary>
+    Task<IReadOnlyList<Slot>> GetOrphanedOfferedSlotsAsync(
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Whether an open offer holds the slot.</summary>
+    Task<bool> HasOpenOfferForSlotAsync(Guid slotId, CancellationToken cancellationToken = default);
+
+    /// <summary>Every queue with an active entry in it.</summary>
+    Task<IReadOnlyList<WaitlistQueue>> GetActiveQueuesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Stages a new entry for insertion (not yet committed).</summary>
     Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default);
