@@ -11,6 +11,9 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
     private const string SlotDoctorStartConstraintName = "ux_slots_doctor_start";
     private const string ProcessedMessagePrimaryKeyName = "pk_processed_messages";
     private const string AppointmentSlotConstraintName = "ux_appointments_slot";
+    private const string WaitlistPatientActiveConstraintName = "ux_waitlist_entries_patient_active";
+    private const string WaitlistQueuePositionConstraintName = "ux_waitlist_entries_queue_position";
+    private const string WaitlistOfferedSlotConstraintName = "ux_waitlist_entries_offered_slot";
 
     private readonly AppointmentDbContext _dbContext;
 
@@ -61,6 +64,16 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
             _dbContext.ChangeTracker.Clear();
             throw new DuplicateProcessedMessageException(exception);
         }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation
+            } violation
+            && TranslateWaitlistViolation(violation.ConstraintName, exception) is { } translated)
+        {
+            _dbContext.ChangeTracker.Clear();
+            throw translated;
+        }
         catch (DbUpdateConcurrencyException exception)
         {
             // A slot's xmin no longer matched what we read: another writer committed first. The
@@ -102,6 +115,23 @@ public sealed class AppointmentUnitOfWork : IUnitOfWork
             throw;
         }
     }
+
+    /// <summary>
+    /// SCRUM-37. What a unique violation on a waitlist index means, or null for any other index.
+    /// </summary>
+    /// <remarks>
+    /// A second active entry for the patient is an answer — they are already waiting. The other two
+    /// mean a writer skipped the queue lock or lost a race to one that held it: another writer got
+    /// in the way, so, like a stale slot token, the whole operation should simply run again.
+    /// </remarks>
+    internal static Exception? TranslateWaitlistViolation(string? constraintName, Exception exception) =>
+        constraintName switch
+        {
+            WaitlistPatientActiveConstraintName => new DuplicateWaitlistEntryException(exception),
+            WaitlistQueuePositionConstraintName or WaitlistOfferedSlotConstraintName =>
+                new ConcurrentUpdateException(exception),
+            _ => null
+        };
 
     internal static bool IsTransientConflict(Exception exception) =>
         (exception as PostgresException ?? exception.InnerException as PostgresException) is

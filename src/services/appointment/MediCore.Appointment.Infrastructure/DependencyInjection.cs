@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentRepository, AppointmentRepository>();
         services.AddScoped<IAppointmentHistoryRepository, AppointmentHistoryRepository>();
         services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
+        services.AddScoped<IWaitlistRepository, WaitlistRepository>();
         // Registered unconditionally: booking writes outbox rows whether or not a broker exists.
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IUnitOfWork, AppointmentUnitOfWork>();
