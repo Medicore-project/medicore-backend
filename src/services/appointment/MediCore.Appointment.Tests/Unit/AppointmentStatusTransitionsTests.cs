@@ -17,7 +17,8 @@ public sealed class AppointmentStatusTransitionsTests
     [
         (AppointmentStatus.Booked, AppointmentStatus.Booked),
         (AppointmentStatus.Booked, AppointmentStatus.Cancelled),
-        (AppointmentStatus.Booked, AppointmentStatus.Completed)
+        (AppointmentStatus.Booked, AppointmentStatus.Completed),
+        (AppointmentStatus.Booked, AppointmentStatus.NoShow)
     ];
 
     public static TheoryData<string, string> EveryPair()
@@ -36,7 +37,7 @@ public sealed class AppointmentStatusTransitionsTests
 
     [Theory]
     [MemberData(nameof(EveryPair))]
-    public void Only_a_booked_appointment_can_change_and_only_to_booked_cancelled_or_completed(
+    public void Only_a_booked_appointment_can_change_and_only_to_booked_cancelled_completed_or_no_show(
         string from, string to)
     {
         Assert.Equal(AllowedPairs.Contains((from, to)), AppointmentStatusTransitions.CanTransition(from, to));

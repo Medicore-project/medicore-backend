@@ -108,6 +108,33 @@ public sealed class AppointmentAuthorizationPolicyTests
         Assert.Equal(expectedSuccess, result.Succeeded);
     }
 
+    [Theory]
+    [InlineData("Admin", true)]
+    [InlineData("Receptionist", true)]
+    [InlineData("Doctor", true)]
+    [InlineData("Nurse", false)]
+    [InlineData("Patient", false)]
+    public async Task The_front_desk_and_doctors_hold_the_no_show_recorder_policy(string role, bool expectedSuccess)
+    {
+        // A doctor passes the policy for any appointment; the service narrows them to their own.
+        var result = await AuthorizeAsync(role, AppointmentAuthorizationPolicies.NoShowRecorder);
+
+        Assert.Equal(expectedSuccess, result.Succeeded);
+    }
+
+    [Theory]
+    [InlineData("Admin", true)]
+    [InlineData("Receptionist", false)]
+    [InlineData("Doctor", false)]
+    [InlineData("Nurse", false)]
+    [InlineData("Patient", false)]
+    public async Task Only_admin_holds_the_report_reader_policy(string role, bool expectedSuccess)
+    {
+        var result = await AuthorizeAsync(role, AppointmentAuthorizationPolicies.ReportReader);
+
+        Assert.Equal(expectedSuccess, result.Succeeded);
+    }
+
     // ── Which policy each endpoint carries ────────────────────────────────────
 
     [Theory]
@@ -116,10 +143,11 @@ public sealed class AppointmentAuthorizationPolicyTests
     [InlineData(nameof(AppointmentChangesController.CancelMine), AppointmentAuthorizationPolicies.BookingHolder)]
     [InlineData(nameof(AppointmentChangesController.RescheduleMine), AppointmentAuthorizationPolicies.BookingHolder)]
     [InlineData(nameof(AppointmentChangesController.Complete), AppointmentAuthorizationPolicies.AppointmentCompleter)]
+    [InlineData(nameof(AppointmentChangesController.MarkNoShow), AppointmentAuthorizationPolicies.NoShowRecorder)]
     public void Each_appointment_change_endpoint_carries_its_policy(string methodName, string policy)
     {
         // The staff routes are front desk only; the mine routes answer only to a booking token;
-        // completion is the doctor's.
+        // completion is the doctor's; a no-show is the front desk's or the doctor's.
         var attribute = Assert.Single(GetAuthorizeAttributes<AppointmentChangesController>(methodName));
 
         Assert.Equal(policy, attribute.Policy);

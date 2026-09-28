@@ -83,4 +83,7 @@ public static class AppointmentHistoryAction
     public const string Rescheduled = "Rescheduled";
     public const string Cancelled = "Cancelled";
     public const string Completed = "Completed";
+
+    /// <summary>SCRUM-38: the patient did not attend. Recorded, but announced to no other service.</summary>
+    public const string NoShow = "NoShow";
 }

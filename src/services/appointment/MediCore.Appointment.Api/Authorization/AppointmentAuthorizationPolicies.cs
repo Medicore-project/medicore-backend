@@ -105,6 +105,28 @@ public static class AppointmentAuthorizationPolicies
     public const string AppointmentCompleter = "AppointmentCompleter";
 
     /// <summary>
+    /// Mark a booked appointment a no-show (SCRUM-38).
+    /// </summary>
+    /// <remarks>
+    /// Wider than <see cref="AppointmentCompleter"/> on purpose: whether the patient turned up is
+    /// something the front desk sees first, and a no-show writes nothing clinical. A Doctor still
+    /// passes only for their own appointments — the lifecycle service checks the caller's
+    /// <c>staffId</c> claim against the appointment's <c>DoctorId</c> unless they are front desk.
+    /// Nurse is excluded, as from every other appointment change.
+    /// </remarks>
+    public const string NoShowRecorder = "NoShowRecorder";
+
+    /// <summary>
+    /// Read and export the doctor utilisation report (SCRUM-38).
+    /// </summary>
+    /// <remarks>
+    /// Admin only. The story's "Manager" is not a seeded role, and Admin is the one that carries
+    /// management reporting elsewhere — the Patient service's demographics report and Identity's
+    /// audit report are both Admin-only.
+    /// </remarks>
+    public const string ReportReader = "ReportReader";
+
+    /// <summary>
     /// The claim a booking token carries, naming the single patient it can book for. Minted by the
     /// Patient service's identify and public-register endpoints, signed with the symmetric key
     /// every service shares. A staff token never carries it.
@@ -132,6 +154,8 @@ public static class AppointmentAuthorizationPolicies
             .AddPolicy(LeaveReader, policy => policy.RequireRole("Admin", "Doctor"))
             .AddPolicy(LeaveApprover, policy => policy.RequireRole("Admin"))
             .AddPolicy(AppointmentCompleter, policy => policy.RequireRole("Doctor"))
+            .AddPolicy(NoShowRecorder, policy => policy.RequireRole("Admin", "Receptionist", "Doctor"))
+            .AddPolicy(ReportReader, policy => policy.RequireRole("Admin"))
             .AddPolicy(BookingCreator, policy => policy.RequireAssertion(context =>
                 context.User.IsInRole("Admin")
                 || context.User.IsInRole("Receptionist")

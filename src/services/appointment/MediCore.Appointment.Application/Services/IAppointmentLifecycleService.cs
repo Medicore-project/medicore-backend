@@ -1,4 +1,5 @@
 using MediCore.Appointment.Application.DTOs;
+using MediCore.Appointment.Application.Entities;
 
 namespace MediCore.Appointment.Application.Services;
 
@@ -10,7 +11,15 @@ namespace MediCore.Appointment.Application.Services;
 /// Set for a booking-token caller, who may only change their own appointments. Null for staff.
 /// </param>
 /// <param name="StaffId">The caller's staff id, when they have one.</param>
-public sealed record AppointmentCaller(string Actor, Guid? PatientId = null, Guid? StaffId = null);
+/// <param name="IsFrontDesk">
+/// Admin or Receptionist. Only read by marking a no-show, which the front desk may do for any
+/// doctor's appointment while a doctor may do it only for their own.
+/// </param>
+public sealed record AppointmentCaller(
+    string Actor,
+    Guid? PatientId = null,
+    Guid? StaffId = null,
+    bool IsFrontDesk = false);
 
 /// <summary>The outcome of a change to an existing appointment. The controller picks the status code.</summary>
 public abstract record AppointmentChangeResult;
@@ -69,13 +78,21 @@ public sealed record AppointmentPatientOverlapResult(
     DateTime ExistingEndUtc) : AppointmentChangeResult;
 
 /// <summary>
-/// Only the appointment's own doctor may complete it, and the caller is not that doctor — or has
-/// no staff id at all.
+/// The caller is a doctor acting on an appointment that is not theirs — or has no staff id at all.
+/// <paramref name="Action"/> is the <c>AppointmentHistoryAction</c> that was refused: completing is
+/// the treating doctor's alone, while a no-show may also be marked by the front desk.
 /// </summary>
-public sealed record AppointmentNotYourAppointmentResult : AppointmentChangeResult;
+public sealed record AppointmentNotYourAppointmentResult(string Action = AppointmentHistoryAction.Completed)
+    : AppointmentChangeResult;
 
 /// <summary>The appointment has not started yet, so it cannot have been completed.</summary>
 public sealed record AppointmentNotStartedYetResult(DateTime StartUtc) : AppointmentChangeResult;
+
+/// <summary>
+/// The appointment has not ended yet, so the patient may still arrive and it cannot be marked a
+/// no-show.
+/// </summary>
+public sealed record AppointmentNotEndedYetResult(DateTime EndUtc) : AppointmentChangeResult;
 
 /// <summary>
 /// Someone else booked the slot a reschedule asked for while it was in flight. The reschedule
@@ -127,5 +144,19 @@ public interface IAppointmentLifecycleService
         string notes,
         AppointmentCaller caller,
         string correlationId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records that the patient did not attend a booked appointment (SCRUM-38). The front desk may
+    /// mark any appointment; a doctor only their own. Only once the appointment has ended, because
+    /// the status is terminal and a late patient may still arrive before then.
+    /// </summary>
+    /// <remarks>
+    /// The slot stays booked — the time was consumed. No event is published: no contract for one
+    /// exists, and nothing downstream acts on a no-show yet.
+    /// </remarks>
+    Task<AppointmentChangeResult> MarkNoShowAsync(
+        Guid appointmentId,
+        AppointmentCaller caller,
         CancellationToken cancellationToken = default);
 }
