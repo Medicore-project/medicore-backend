@@ -1,8 +1,10 @@
 using Confluent.Kafka;
 using MediCore.Appointment.Application.Interfaces;
+using MediCore.Appointment.Application.Scheduling;
 using MediCore.Appointment.Infrastructure.Messaging;
 using MediCore.Appointment.Infrastructure.Persistence;
 using MediCore.Appointment.Infrastructure.Persistence.Repositories;
+using MediCore.Appointment.Infrastructure.Waitlist;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,12 +33,14 @@ public static class DependencyInjection
         services.AddScoped<IAppointmentRepository, AppointmentRepository>();
         services.AddScoped<IAppointmentHistoryRepository, AppointmentHistoryRepository>();
         services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
+        services.AddScoped<IWaitlistRepository, WaitlistRepository>();
         // Registered unconditionally: booking writes outbox rows whether or not a broker exists.
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IUnitOfWork, AppointmentUnitOfWork>();
 
         AddStaffEventsConsumer(services, configuration);
         AddOutboxPublisher(services, configuration);
+        AddWaitlistSweeper(services, configuration);
 
         return services;
     }
@@ -96,5 +100,27 @@ public static class DependencyInjection
             }).Build());
         services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
         services.AddHostedService<OutboxProcessor>();
+    }
+
+    /// <summary>
+    /// Expires lapsed waitlist offers and passes them on (SCRUM-37). Registered with or without
+    /// Kafka — it needs only the database — and skipped when
+    /// <c>Appointments:Waitlist:SweepIntervalSeconds</c> is zero or less, which the integration test
+    /// host sets so a background pass never changes rows under a test. Unset means the default.
+    /// </summary>
+    internal static void AddWaitlistSweeper(IServiceCollection services, IConfiguration configuration)
+    {
+        var configured = configuration[$"{WaitlistOptions.SectionName}:{nameof(WaitlistOptions.SweepIntervalSeconds)}"];
+        var seconds = int.TryParse(configured, out var parsed)
+            ? parsed
+            : new WaitlistOptions().SweepIntervalSeconds;
+
+        if (seconds <= 0)
+        {
+            return;
+        }
+
+        services.AddSingleton(new WaitlistSweepSchedule(TimeSpan.FromSeconds(seconds)));
+        services.AddHostedService<WaitlistSweepProcessor>();
     }
 }

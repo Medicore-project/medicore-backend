@@ -256,6 +256,32 @@ public sealed class AppointmentChangesControllerTests
     }
 
     [Fact]
+    public async Task A_new_slot_held_for_the_waitlist_is_described_in_words()
+    {
+        // "it is Offered" would read to a patient as if the slot were being offered to them.
+        var service = new StubLifecycleService { Result = new AppointmentNewSlotNotAvailableResult(SlotStatus.Offered) };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal(
+            "This slot is no longer available; it is being held for a patient on the waitlist.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Any_other_unavailable_status_is_named()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNewSlotNotAvailableResult(SlotStatus.Blocked) };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal("This slot is no longer available; it is Blocked.", ProblemOf(result).Title);
+    }
+
+    [Fact]
     public async Task A_clash_names_the_other_appointment_in_colombo_time()
     {
         var service = new StubLifecycleService

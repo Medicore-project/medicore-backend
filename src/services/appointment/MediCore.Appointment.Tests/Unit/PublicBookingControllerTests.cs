@@ -164,6 +164,53 @@ public sealed class PublicBookingControllerTests
         Assert.Empty(writeVerbs);
     }
 
+    // ── SCRUM-37: days, full or not ──────────────────────────────────────────
+
+    [Fact]
+    public async Task Days_say_only_which_are_full()
+    {
+        // No counts, and nothing about who holds the times.
+        var waitlist = new FakeWaitlistService();
+        var controller = CreateController(waitlist: waitlist);
+
+        var result = await controller.GetDays(DoctorId, null, null, CancellationToken.None);
+
+        var days = Assert.IsAssignableFrom<IReadOnlyList<PublicBookingDayResponse>>(
+            Assert.IsType<OkObjectResult>(result).Value);
+        Assert.Equal([true, false], days.Select(day => day.IsFull));
+        Assert.Equal(["Date", "IsFull"], PropertyNamesOf<PublicBookingDayResponse>());
+        Assert.Equal((DoctorId, (DateOnly?)null, (DateOnly?)null), waitlist.Asked.Single());
+    }
+
+    [Fact]
+    public async Task Days_need_a_doctor()
+    {
+        var waitlist = new FakeWaitlistService();
+
+        var result = await CreateController(waitlist: waitlist).GetDays(Guid.Empty, null, null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(waitlist.Asked);
+    }
+
+    [Fact]
+    public async Task Days_refuse_a_backwards_range()
+    {
+        var result = await CreateController().GetDays(
+            DoctorId, new DateOnly(2026, 9, 30), new DateOnly(2026, 9, 29), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Days_for_a_doctor_who_is_not_bookable_are_404()
+    {
+        var result = await CreateController(waitlist: new FakeWaitlistService(doctorIsBookable: false))
+            .GetDays(DoctorId, null, null, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static string[] PropertyNamesOf<T>() =>
@@ -171,8 +218,9 @@ public sealed class PublicBookingControllerTests
 
     private static PublicBookingController CreateController(
         FakeDoctorDirectoryService? doctors = null,
-        FakeSlotService? slots = null) =>
-        new(doctors ?? new FakeDoctorDirectoryService(), slots ?? new FakeSlotService())
+        FakeSlotService? slots = null,
+        FakeWaitlistService? waitlist = null) =>
+        new(doctors ?? new FakeDoctorDirectoryService(), slots ?? new FakeSlotService(), waitlist ?? new FakeWaitlistService())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -191,6 +239,40 @@ public sealed class PublicBookingControllerTests
         public Task<DoctorResponse?> GetBookableAsync(
             Guid doctorId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("The public page lists doctors; it never fetches one.");
+    }
+
+    private sealed class FakeWaitlistService(bool doctorIsBookable = true) : IWaitlistService
+    {
+        public List<(Guid DoctorId, DateOnly? From, DateOnly? To)> Asked { get; } = [];
+
+        public Task<WaitlistDaysResult> GetDaysAsync(
+            Guid doctorId, DateOnly? from, DateOnly? to, CancellationToken cancellationToken = default)
+        {
+            Asked.Add((doctorId, from, to));
+            return Task.FromResult<WaitlistDaysResult>(doctorIsBookable
+                ? new WaitlistDaysFoundResult(
+                [
+                    new PublicBookingDayResponse(new DateOnly(2026, 9, 24), true),
+                    new PublicBookingDayResponse(new DateOnly(2026, 9, 25), false)
+                ])
+                : new WaitlistDaysDoctorNotFoundResult());
+        }
+
+        public Task<WaitlistJoinResult> JoinAsync(
+            Guid doctorId, DateOnly date, Guid patientId, BookingPatientDetails? patientDetails,
+            string? serviceCode, string actor, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Joining needs a booking token; it is never public.");
+
+        public Task<IReadOnlyList<WaitlistEntryResponse>> GetMineAsync(
+            Guid patientId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Entries are never public.");
+
+        public Task<IReadOnlyList<WaitlistEntryResponse>> ListAsync(
+            Guid? doctorId, DateOnly from, DateOnly to, string? status, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Entries are never public.");
+
+        public Task<WaitlistEntryResponse?> GetAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Entries are never public.");
     }
 
     private sealed class FakeSlotService : ISlotService

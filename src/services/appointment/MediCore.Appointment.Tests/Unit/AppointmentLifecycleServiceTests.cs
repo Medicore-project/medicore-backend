@@ -438,6 +438,20 @@ public sealed class AppointmentLifecycleServiceTests
     }
 
     [Fact]
+    public async Task A_new_slot_held_for_the_waitlist_between_our_read_and_our_save_is_reported_taken()
+    {
+        // SCRUM-37. The waitlist sweeper offered the new slot to someone in its queue.
+        var fixture = new Fixture();
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+        fixture.UnitOfWork.BetweenAttempts = () => fixture.NewSlot.Status = SlotStatus.Offered;
+
+        var result = await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        Assert.IsType<AppointmentSlotTakenResult>(result);
+        AssertStillOnTheOriginalSlot(fixture);
+    }
+
+    [Fact]
     public async Task A_lost_race_that_leaves_the_new_slot_free_moves_the_appointment_on_the_retry()
     {
         // The token only says the row changed — a harmless write, say. The retry finds it free.
@@ -666,6 +680,100 @@ public sealed class AppointmentLifecycleServiceTests
 
         Assert.IsType<AppointmentNotFoundResult>(result);
         AssertNothingChanged(fixture);
+    }
+
+    // ── SCRUM-37: released slots go to the waitlist first ────────────────────
+
+    [Fact]
+    public async Task A_cancelled_appointments_slot_is_offered_to_the_waitlist_before_the_save()
+    {
+        // AC2. Offered before the one save, so the offer commits with the cancellation.
+        var fixture = new Fixture();
+
+        await fixture.Service.CancelAsync(AppointmentId, "Travelling", Desk, "corr-1");
+
+        var (slot, savesBefore) = Assert.Single(fixture.Waitlist.Offers);
+        Assert.Same(fixture.Slot, slot);
+        Assert.Equal(0, savesBefore);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task With_someone_waiting_the_released_slot_is_held_and_never_available()
+    {
+        var fixture = new Fixture();
+        fixture.Waitlist.SomeoneIsWaiting = true;
+
+        var result = await fixture.Service.CancelAsync(AppointmentId, "Travelling", Desk, "corr-1");
+
+        Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal(SlotStatus.Offered, fixture.Slot.Status);
+        Assert.Equal(AppointmentStatus.Cancelled, fixture.Appointment.Status);
+        Assert.Single(fixture.Outbox.Added);
+        Assert.Equal(1, fixture.UnitOfWork.Commits);
+    }
+
+    [Fact]
+    public async Task A_stranded_slot_removed_on_cancel_is_not_offered()
+    {
+        // It is outside the doctor's hours now; there is nothing to offer.
+        var fixture = new Fixture();
+        fixture.Slot.Status = SlotStatus.Flagged;
+
+        await fixture.Service.CancelAsync(AppointmentId, "Travelling", Desk, "corr-1");
+
+        Assert.Empty(fixture.Waitlist.Offers);
+    }
+
+    [Fact]
+    public async Task A_cancel_refused_by_the_window_offers_nothing()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddHours(2);
+
+        await fixture.Service.CancelAsync(AppointmentId, "Travelling", Desk, "corr-1");
+
+        Assert.Empty(fixture.Waitlist.Offers);
+    }
+
+    [Fact]
+    public async Task A_reschedule_offers_the_slot_it_left_and_not_the_one_it_took()
+    {
+        var fixture = new Fixture();
+        fixture.Waitlist.SomeoneIsWaiting = true;
+
+        await fixture.Service.RescheduleAsync(AppointmentId, NewSlotId, Desk);
+
+        var (slot, savesBefore) = Assert.Single(fixture.Waitlist.Offers);
+        Assert.Same(fixture.Slot, slot);
+        Assert.Equal(0, savesBefore);
+        Assert.Equal(SlotStatus.Offered, fixture.Slot.Status);
+        Assert.Equal(SlotStatus.Booked, fixture.NewSlot.Status);
+    }
+
+    [Fact]
+    public async Task A_rolled_back_cancel_leaves_no_offer_behind()
+    {
+        // The offer is part of the attempt: when the save fails, the slot is Booked again.
+        var fixture = new Fixture();
+        fixture.Waitlist.SomeoneIsWaiting = true;
+        fixture.UnitOfWork.Throw = new InvalidOperationException("database down");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.Service.CancelAsync(AppointmentId, "Travelling", Desk, "corr-1"));
+
+        Assert.Equal(SlotStatus.Booked, fixture.Slot.Status);
+    }
+
+    [Fact]
+    public async Task Completing_releases_nothing_and_so_offers_nothing()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-20);
+
+        await fixture.Service.CompleteAsync(AppointmentId, "Seen.", TreatingDoctor, "corr-1");
+
+        Assert.Empty(fixture.Waitlist.Offers);
     }
 
     // ── Complete ─────────────────────────────────────────────────────────────
@@ -906,6 +1014,7 @@ public sealed class AppointmentLifecycleServiceTests
             Outbox = new FakeOutboxMessageRepository();
             History = new FakeAppointmentHistoryRepository();
             UnitOfWork = new FakeUnitOfWork(Log, onBegin: TakeSnapshot, onRollback: Restore);
+            Waitlist = new FakeWaitlistOfferer(UnitOfWork);
 
             Service = new AppointmentLifecycleService(
                 Appointments,
@@ -913,6 +1022,7 @@ public sealed class AppointmentLifecycleServiceTests
                 Doctors,
                 Outbox,
                 History,
+                Waitlist,
                 UnitOfWork,
                 new FixedTimeProvider(Now),
                 Options.Create(new CancellationPolicyOptions { WindowHours = windowHours }));
@@ -938,6 +1048,9 @@ public sealed class AppointmentLifecycleServiceTests
         public FakeAppointmentHistoryRepository History { get; }
 
         public FakeUnitOfWork UnitOfWork { get; }
+
+        /// <summary>Nobody is waiting unless a test says so.</summary>
+        public FakeWaitlistOfferer Waitlist { get; }
 
         public AppointmentLifecycleService Service { get; }
 
@@ -1121,6 +1234,38 @@ public sealed class AppointmentLifecycleServiceTests
         public Task<IReadOnlyList<AppointmentHistoryEntry>> ListForAppointmentAsync(
             Guid appointmentId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException("Changes never read history.");
+    }
+
+    /// <summary>
+    /// Records every slot offered to the waitlist, and how many saves had happened by then. Kept
+    /// out of the shared <c>Log</c>, whose exact sequences other tests assert. When someone is
+    /// waiting it holds the slot, as the real offerer does.
+    /// </summary>
+    private sealed class FakeWaitlistOfferer(FakeUnitOfWork unitOfWork) : IWaitlistOfferer
+    {
+        public List<(Slot Slot, int SavesBefore)> Offers { get; } = [];
+
+        public bool SomeoneIsWaiting { get; set; }
+
+        public Task<WaitlistEntry?> OfferAsync(
+            Slot slot, DateTime nowUtc, string actor, CancellationToken cancellationToken = default)
+        {
+            Offers.Add((slot, unitOfWork.SaveCount));
+
+            if (!SomeoneIsWaiting || slot.Status != SlotStatus.Available)
+            {
+                return Task.FromResult<WaitlistEntry?>(null);
+            }
+
+            slot.Status = SlotStatus.Offered;
+            return Task.FromResult<WaitlistEntry?>(
+                new WaitlistEntry { Status = WaitlistStatus.Offered, OfferedSlotId = slot.SlotId });
+        }
+
+        public Task<WaitlistEntry?> PassOnAsync(
+            WaitlistEntry entry, Slot? slot, string closingStatus, string? reason, DateTime nowUtc,
+            string actor, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Appointment changes never close a waitlist offer.");
     }
 
     private sealed class FakeUnitOfWork : IUnitOfWork

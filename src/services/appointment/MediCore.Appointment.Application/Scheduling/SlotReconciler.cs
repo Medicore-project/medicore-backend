@@ -91,7 +91,8 @@ public sealed class SlotReconciler : ISlotReconciler
             {
                 // Available, and Blocked too: a block is an annotation on a slot that ought to
                 // exist, so once the schedule stops covering that time the block has nothing left
-                // to describe.
+                // to describe. Offered as well: the clinic has withdrawn a time it was holding for a
+                // waitlisted patient, and schedule revision puts that patient back in the queue.
                 toDelete.Add(slot);
             }
         }

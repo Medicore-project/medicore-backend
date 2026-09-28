@@ -13,6 +13,7 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
     private readonly ISlotRepository _slotRepository;
     private readonly IPublicHolidayRepository _holidayRepository;
     private readonly IDoctorLeaveRepository _leaveRepository;
+    private readonly IWaitlistRepository _waitlistRepository;
     private readonly ISlotGenerator _slotGenerator;
     private readonly ISlotReconciler _reconciler;
     private readonly IUnitOfWork _unitOfWork;
@@ -24,6 +25,7 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
         ISlotRepository slotRepository,
         IPublicHolidayRepository holidayRepository,
         IDoctorLeaveRepository leaveRepository,
+        IWaitlistRepository waitlistRepository,
         ISlotGenerator slotGenerator,
         ISlotReconciler reconciler,
         IUnitOfWork unitOfWork,
@@ -34,6 +36,7 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
         _slotRepository = slotRepository;
         _holidayRepository = holidayRepository;
         _leaveRepository = leaveRepository;
+        _waitlistRepository = waitlistRepository;
         _slotGenerator = slotGenerator;
         _reconciler = reconciler;
         _unitOfWork = unitOfWork;
@@ -152,6 +155,7 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
 
         if (plan.ToDelete.Count > 0)
         {
+            await ReturnOffersToTheQueueAsync(plan.ToDelete, cancellationToken);
             _slotRepository.RemoveRange(plan.ToDelete);
         }
 
@@ -187,5 +191,45 @@ public sealed class ScheduleRevisionService : IScheduleRevisionService
             SlotsCreated: plan.ToInsert.Count,
             SlotsRemoved: plan.ToDelete.Count,
             SlotsFlagged: plan.ToFlag.Count);
+    }
+
+    /// <summary>Who schedule revision's waitlist changes are recorded as.</summary>
+    public const string WaitlistActor = "schedule-revision";
+
+    /// <summary>
+    /// SCRUM-37. A slot being deleted may be held for a waitlist offer. The clinic withdrew the
+    /// time, not the patient, so their entry goes back to waiting at its original position, with
+    /// the offer cleared; the sweeper offers them the next free time.
+    /// </summary>
+    /// <remarks>
+    /// No queue lock is possible here — revision runs without an explicit transaction, and an
+    /// advisory transaction lock would be released at the end of its own statement. The slot's
+    /// concurrency token does the job instead: an accept, decline or expiry racing this revision
+    /// also writes the slot, so the DELETE below matches no row, the save fails, and the whole
+    /// revision — this reload included — runs again.
+    /// </remarks>
+    private async Task ReturnOffersToTheQueueAsync(
+        IReadOnlyCollection<Slot> deleting,
+        CancellationToken cancellationToken)
+    {
+        var offeredSlotIds = deleting
+            .Where(slot => slot.Status == SlotStatus.Offered)
+            .Select(slot => slot.SlotId)
+            .ToList();
+
+        if (offeredSlotIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var entry in await _waitlistRepository.GetTrackedOfferedForSlotsAsync(
+                     offeredSlotIds, cancellationToken))
+        {
+            entry.Status = WaitlistStatus.Waiting;
+            entry.OfferedSlotId = null;
+            entry.OfferedAtUtc = null;
+            entry.OfferExpiresAtUtc = null;
+            entry.UpdatedBy = WaitlistActor;
+        }
     }
 }

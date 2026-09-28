@@ -18,6 +18,8 @@ public static class DependencyInjection
             configuration.GetSection(SchedulingOptions.SectionName));
         services.Configure<CancellationPolicyOptions>(
             configuration.GetSection(CancellationPolicyOptions.SectionName));
+        services.Configure<WaitlistOptions>(
+            configuration.GetSection(WaitlistOptions.SectionName));
 
         services.AddScoped<ISlotGenerator, SlotGenerator>();
         services.AddScoped<ISlotReconciler, SlotReconciler>();
@@ -32,6 +34,10 @@ public static class DependencyInjection
         services.AddScoped<IDoctorLeaveService, DoctorLeaveService>();
         services.AddScoped<IStaffEventHandler, StaffEventHandler>();
         services.AddScoped<IDoctorDirectoryService, DoctorDirectoryService>();
+        services.AddScoped<IWaitlistService, WaitlistService>();
+        services.AddScoped<IWaitlistOfferer, WaitlistOfferer>();
+        services.AddScoped<IWaitlistChangeService, WaitlistChangeService>();
+        services.AddScoped<IWaitlistSweeper, WaitlistSweeper>();
 
         // Injected into application services so tests can pin "now" without touching the clock.
         services.AddSingleton(TimeProvider.System);

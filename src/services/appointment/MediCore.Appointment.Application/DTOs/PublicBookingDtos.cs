@@ -37,3 +37,9 @@ public sealed record PublicSlotResponse(
     DateTime EndUtc,
     DateOnly SlotDate,
     int DurationMinutes);
+
+/// <summary>
+/// One of a doctor's clinic days as the public booking page sees it (SCRUM-37): whether every time
+/// that day is taken, so the page can offer the waitlist instead of a blank day.
+/// </summary>
+public sealed record PublicBookingDayResponse(DateOnly Date, bool IsFull);

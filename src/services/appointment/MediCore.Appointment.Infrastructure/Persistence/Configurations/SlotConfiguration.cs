@@ -16,8 +16,8 @@ public sealed class SlotConfiguration : IEntityTypeConfiguration<Slot>
     /// regeneration at the same instant. Flagged rows are excluded because a flagged slot is a
     /// historical record of a booking that no longer fits the schedule — if the schedule later
     /// covers that time again, a fresh bookable slot must be able to coexist with it.
-    /// Available, Booked and Blocked all remain inside the uniqueness set, so regeneration can
-    /// never produce a duplicate bookable slot.
+    /// Available, Booked, Blocked and Offered all remain inside the uniqueness set, so regeneration
+    /// can never produce a duplicate bookable slot.
     /// </para>
     /// </summary>
     internal const string DoctorStartUniqueFilter =

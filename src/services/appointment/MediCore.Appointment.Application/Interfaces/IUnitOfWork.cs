@@ -16,8 +16,12 @@ public interface IUnitOfWork
     /// <exception cref="Exceptions.SlotAlreadyBookedException">
     /// An active appointment already exists for that slot.
     /// </exception>
+    /// <exception cref="Exceptions.DuplicateWaitlistEntryException">
+    /// The patient already has an active entry in that waitlist queue.
+    /// </exception>
     /// <exception cref="Exceptions.ConcurrentUpdateException">
-    /// A slot this save updates or deletes was changed by someone else after it was read.
+    /// A slot this save updates or deletes was changed by someone else after it was read; or two
+    /// writers to one waitlist queue collided on a position or an offered slot.
     /// </exception>
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 

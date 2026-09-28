@@ -108,6 +108,61 @@ public sealed class SlotConflictTests
         Assert.Equal(3, fixture.UnitOfWork.SaveCount);
     }
 
+    // ── SCRUM-37: a slot held for the waitlist ───────────────────────────────
+
+    [Fact]
+    public async Task Deleting_a_slot_held_for_an_offer_puts_the_patient_back_in_line()
+    {
+        // The clinic withdrew the time, not the patient: same position, offer cleared.
+        var fixture = new Fixture(SlotStatus.Offered);
+        var entry = new WaitlistEntry
+        {
+            Position = 4,
+            Status = WaitlistStatus.Offered,
+            OfferedSlotId = SlotId,
+            OfferedAtUtc = Now.AddMinutes(-5),
+            OfferExpiresAtUtc = Now.AddMinutes(55)
+        };
+        fixture.Waitlist.Offered.Add(entry);
+
+        var summary = await fixture.Revisions.ReconcileDoctorAsync(DoctorId, "Schedule removed.");
+
+        Assert.Equal(1, summary.SlotsRemoved);
+        Assert.Equal(WaitlistStatus.Waiting, entry.Status);
+        Assert.Equal(4, entry.Position);
+        Assert.Null(entry.OfferedSlotId);
+        Assert.Null(entry.OfferedAtUtc);
+        Assert.Null(entry.OfferExpiresAtUtc);
+        Assert.Null(entry.ClosedAtUtc);
+        Assert.Equal(ScheduleRevisionService.WaitlistActor, entry.UpdatedBy);
+        Assert.Equal([SlotId], fixture.Waitlist.AskedFor);
+    }
+
+    [Theory]
+    [InlineData(SlotStatus.Available)]
+    [InlineData(SlotStatus.Blocked)]
+    public async Task Deleting_a_slot_nobody_was_offered_does_not_touch_the_waitlist(string status)
+    {
+        var fixture = new Fixture(status);
+
+        await fixture.Revisions.ReconcileDoctorAsync(DoctorId, "Schedule removed.");
+
+        Assert.Empty(fixture.Waitlist.AskedFor);
+    }
+
+    [Fact]
+    public async Task A_revision_that_loses_a_race_reloads_the_offer_before_putting_it_back()
+    {
+        // The slot token caught a concurrent write; the rerun reads the waitlist afresh.
+        var fixture = new Fixture(SlotStatus.Offered, SlotStatus.Offered);
+        fixture.Waitlist.Offered.Add(new WaitlistEntry { Status = WaitlistStatus.Offered, OfferedSlotId = SlotId });
+        fixture.UnitOfWork.Outcomes.Enqueue(new ConcurrentUpdateException());
+
+        await fixture.Revisions.ReconcileDoctorAsync(DoctorId, "Schedule removed.");
+
+        Assert.Equal([SlotId, SlotId], fixture.Waitlist.AskedFor);
+    }
+
     // ── Fixture and fakes ─────────────────────────────────────────────────────
 
     private sealed class Fixture
@@ -129,6 +184,7 @@ public sealed class SlotConflictTests
                 SlotRepository,
                 new NoHolidayRepository(),
                 new NoLeaveRepository(),
+                Waitlist,
                 generator,
                 new SlotReconciler(),
                 UnitOfWork,
@@ -138,6 +194,7 @@ public sealed class SlotConflictTests
 
         public FakeSlotRepository SlotRepository { get; }
         public FakeUnitOfWork UnitOfWork { get; } = new();
+        public FakeWaitlistRepository Waitlist { get; } = new();
         public SlotService Slots { get; }
         public ScheduleRevisionService Revisions { get; }
     }
@@ -216,6 +273,88 @@ public sealed class SlotConflictTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<Slot>> GetFlaggedAsync(Guid? doctorId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>Only what schedule revision asks of the waitlist: the offers on slots it deletes.</summary>
+    private sealed class FakeWaitlistRepository : IWaitlistRepository
+    {
+        public List<WaitlistEntry> Offered { get; } = [];
+        public List<Guid> AskedFor { get; } = [];
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetTrackedOfferedForSlotsAsync(
+            IReadOnlyCollection<Guid> slotIds, CancellationToken cancellationToken = default)
+        {
+            AskedFor.AddRange(slotIds);
+            return Task.FromResult<IReadOnlyList<WaitlistEntry>>(Offered
+                .Where(entry => entry.Status == WaitlistStatus.Offered
+                    && entry.OfferedSlotId is { } slotId && slotIds.Contains(slotId))
+                .ToList());
+        }
+
+        public Task LockQueueAsync(Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("Schedule revision has no transaction to lock in.");
+
+        public Task<int> GetNextPositionAsync(Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasActiveEntryAsync(Guid patientId, Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<int> CountActiveForPatientAsync(Guid patientId, DateOnly from, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasBookedWithDoctorOnAsync(Guid patientId, Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<DayAvailability>> GetDayAvailabilityAsync(
+            Guid doctorId, DateOnly from, DateOnly to, DateTime nowUtc, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetWaitingTrackedAsync(
+            Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetActiveTrackedAsync(
+            Guid doctorId, DateOnly date, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitlistEntry>> GetLapsedOffersAsync(
+            DateTime nowUtc, int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<Slot>> GetOrphanedOfferedSlotsAsync(int limit, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasOpenOfferForSlotAsync(Guid slotId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitlistQueue>> GetActiveQueuesAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<WaitlistEntry?> GetByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<WaitlistEntry?> GetTrackedByEntryIdAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task AddAsync(WaitlistEntry entry, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<WaitlistListing?> GetListingAsync(Guid waitlistEntryId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitlistListing>> ListForPatientAsync(
+            Guid patientId, DateTime closedSince, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitlistListing>> ListAsync(
+            Guid? doctorId, DateOnly from, DateOnly to, IReadOnlyCollection<string>? statuses,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<WaitingPosition>> GetWaitingPositionsAsync(
+            IReadOnlyCollection<Guid> doctorIds, DateOnly from, DateOnly to, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 

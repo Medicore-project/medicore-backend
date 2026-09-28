@@ -272,8 +272,7 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
             Status = StatusCodes.Status400BadRequest
         }),
         AppointmentDoctorNotFoundResult => DoctorNotFoundProblem(),
-        AppointmentNewSlotNotAvailableResult unavailable => ConflictProblem(
-            $"This slot is no longer available; it is {unavailable.CurrentStatus}."),
+        AppointmentNewSlotNotAvailableResult unavailable => ConflictProblem(DescribeUnavailableSlot(unavailable.CurrentStatus)),
         AppointmentNewSlotInPastResult => BadRequest(new ProblemDetails
         {
             Title = "That appointment time has already passed. Please choose a later slot.",
