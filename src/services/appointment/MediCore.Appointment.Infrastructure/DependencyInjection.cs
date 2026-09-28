@@ -4,10 +4,12 @@ using MediCore.Appointment.Application.Scheduling;
 using MediCore.Appointment.Infrastructure.Messaging;
 using MediCore.Appointment.Infrastructure.Persistence;
 using MediCore.Appointment.Infrastructure.Persistence.Repositories;
+using MediCore.Appointment.Infrastructure.Reporting;
 using MediCore.Appointment.Infrastructure.Waitlist;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using QuestPDF.Infrastructure;
 
 namespace MediCore.Appointment.Infrastructure;
 
@@ -37,6 +39,12 @@ public static class DependencyInjection
         // Registered unconditionally: booking writes outbox rows whether or not a broker exists.
         services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IUnitOfWork, AppointmentUnitOfWork>();
+
+        // SCRUM-38 utilisation report: raw ADO.NET on the scoped context, stateless exporters.
+        services.AddScoped<IUtilisationReportQuery, UtilisationReportQuery>();
+        services.AddSingleton<IUtilisationCsvExporter, UtilisationCsvExporter>();
+        services.AddSingleton<IUtilisationPdfExporter, UtilisationPdfExporter>();
+        QuestPDF.Settings.License = LicenseType.Community;
 
         AddStaffEventsConsumer(services, configuration);
         AddOutboxPublisher(services, configuration);

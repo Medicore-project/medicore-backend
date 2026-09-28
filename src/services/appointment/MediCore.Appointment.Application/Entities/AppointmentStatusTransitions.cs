@@ -6,13 +6,14 @@ namespace MediCore.Appointment.Application.Entities;
 /// <remarks>
 /// <para>
 /// SCRUM-36. Only a booked appointment can change: it can be cancelled, completed, or moved to
-/// another slot (a reschedule, which keeps it <see cref="AppointmentStatus.Booked"/>).
+/// another slot (a reschedule, which keeps it <see cref="AppointmentStatus.Booked"/>). SCRUM-38
+/// adds marking it a no-show, so the utilisation report has no-shows to count.
 /// <see cref="AppointmentStatus.Cancelled"/>, <see cref="AppointmentStatus.Completed"/> and
 /// <see cref="AppointmentStatus.NoShow"/> are terminal: each has already told billing or the
 /// patient record something that a later change could not take back.
 /// </para>
 /// <para>
-/// A table rather than a state-machine library: four statuses and three edges do not need one, and
+/// A table rather than a state-machine library: four statuses and four edges do not need one, and
 /// a table is what the tests enumerate.
 /// </para>
 /// </remarks>
@@ -25,7 +26,8 @@ public static class AppointmentStatusTransitions
             [
                 AppointmentStatus.Booked,
                 AppointmentStatus.Cancelled,
-                AppointmentStatus.Completed
+                AppointmentStatus.Completed,
+                AppointmentStatus.NoShow
             ],
             [AppointmentStatus.Cancelled] = [],
             [AppointmentStatus.Completed] = [],

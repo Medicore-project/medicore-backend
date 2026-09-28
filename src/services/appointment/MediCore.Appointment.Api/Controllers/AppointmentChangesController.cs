@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MediCore.Appointment.Api.Controllers;
 
 /// <summary>
-/// Changes to an existing appointment: cancel, reschedule and complete.
+/// Changes to an existing appointment: cancel, reschedule, complete and mark a no-show.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -27,7 +27,8 @@ namespace MediCore.Appointment.Api.Controllers;
 /// holding a patient's token must still send their staff token to <c>{id}/cancel</c>.
 /// </para>
 /// <para>
-/// Complete has one, for the appointment's own doctor.
+/// Complete has one, for the appointment's own doctor. No-show has one, for the front desk and the
+/// appointment's own doctor.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -236,6 +237,37 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
         return ToActionResult(result);
     }
 
+    // ── PUT /api/appointments/{appointmentId}/no-show ─────────────────────────
+
+    /// <summary>
+    /// Records that the patient did not attend a booked appointment (SCRUM-38), which the
+    /// utilisation report counts. No event is published.
+    /// </summary>
+    /// <remarks>
+    /// Admin and Receptionist may mark any appointment; a Doctor only their own (403 otherwise).
+    /// Only once the appointment has ended (400 before). 409 when it is no longer booked. The slot
+    /// stays booked.
+    /// </remarks>
+    [HttpPut("{appointmentId:guid}/no-show")]
+    [Authorize(Policy = AppointmentAuthorizationPolicies.NoShowRecorder)]
+    [ProducesResponseType(typeof(AppointmentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> MarkNoShow(Guid appointmentId, CancellationToken cancellationToken)
+    {
+        var caller = new AppointmentCaller(
+            CurrentActor(),
+            StaffId: CurrentStaffId(),
+            IsFrontDesk: User.IsInRole("Admin") || User.IsInRole("Receptionist"));
+
+        var result = await _service.MarkNoShowAsync(appointmentId, caller, cancellationToken);
+
+        return ToActionResult(result);
+    }
+
     /// <summary>Maps every change result to its status code, for all the change endpoints.</summary>
     private IActionResult ToActionResult(AppointmentChangeResult result) => result switch
     {
@@ -247,7 +279,7 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
         }),
         AppointmentInvalidTransitionResult invalid => ConflictProblem(
             $"This appointment is {invalid.CurrentStatus} and can no longer be "
-            + $"{invalid.Action.ToLowerInvariant()}."),
+            + $"{DescribeAction(invalid.Action)}."),
         AppointmentInsideCancellationWindowResult window => BadRequest(new ProblemDetails
         {
             Title = DescribeWindow(window),
@@ -280,12 +312,20 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
         }),
         AppointmentPatientOverlapResult overlap => ConflictProblem(
             DescribeClash(overlap.ExistingStartUtc, overlap.ExistingEndUtc)),
+        AppointmentNotYourAppointmentResult { Action: AppointmentHistoryAction.NoShow } => ForbiddenProblem(
+            "A doctor can only mark their own appointments as a no-show."),
         AppointmentNotYourAppointmentResult => ForbiddenProblem(
             "Only the appointment's own doctor can complete it."),
         AppointmentNotStartedYetResult notStarted => BadRequest(new ProblemDetails
         {
             Title = $"This appointment starts at {ColomboTime.ToColombo(notStarted.StartUtc):HH:mm} on "
                 + $"{ColomboTime.ToColomboDate(notStarted.StartUtc):dd MMM yyyy} and cannot be completed before then.",
+            Status = StatusCodes.Status400BadRequest
+        }),
+        AppointmentNotEndedYetResult notEnded => BadRequest(new ProblemDetails
+        {
+            Title = $"This appointment runs until {ColomboTime.ToColombo(notEnded.EndUtc):HH:mm} on "
+                + $"{ColomboTime.ToColomboDate(notEnded.EndUtc):dd MMM yyyy} and cannot be marked a no-show before then.",
             Status = StatusCodes.Status400BadRequest
         }),
         AppointmentSlotTakenResult => ConflictProblem(
@@ -312,6 +352,13 @@ public sealed class AppointmentChangesController : AppointmentControllerBase
         return $"Appointments can only be cancelled or rescheduled up to {hours} before they start. "
             + $"This one starts at {start}.";
     }
+
+    /// <summary>
+    /// A refused action as the end of "can no longer be …". Most history actions read as they are
+    /// once lowercased; "noshow" does not.
+    /// </summary>
+    private static string DescribeAction(string action) =>
+        action == AppointmentHistoryAction.NoShow ? "marked a no-show" : action.ToLowerInvariant();
 
     private string CorrelationId() =>
         HttpContext.Items[CorrelationIdMiddleware.ItemKey]?.ToString() ?? Guid.NewGuid().ToString();

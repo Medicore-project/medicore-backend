@@ -325,6 +325,69 @@ public sealed class AppointmentLifecycleService : IAppointmentLifecycleService
         return new AppointmentChangedResult(AppointmentMapping.ToResponse(appointment));
     }
 
+    public Task<AppointmentChangeResult> MarkNoShowAsync(
+        Guid appointmentId,
+        AppointmentCaller caller,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(token => AttemptMarkNoShowAsync(appointmentId, caller, token), cancellationToken);
+
+    private async Task<AppointmentChangeResult> AttemptMarkNoShowAsync(
+        Guid appointmentId,
+        AppointmentCaller caller,
+        CancellationToken cancellationToken)
+    {
+        var appointment = await LockAppointmentAsync(appointmentId, caller, cancellationToken);
+        if (appointment is null)
+        {
+            return new AppointmentNotFoundResult();
+        }
+
+        // Before the status, as for completing: another doctor learns nothing about this
+        // appointment's state. The front desk records attendance for every doctor.
+        if (!caller.IsFrontDesk && (caller.StaffId is null || caller.StaffId != appointment.DoctorId))
+        {
+            return new AppointmentNotYourAppointmentResult(AppointmentHistoryAction.NoShow);
+        }
+
+        if (!AppointmentStatusTransitions.CanTransition(appointment.Status, AppointmentStatus.NoShow))
+        {
+            return new AppointmentInvalidTransitionResult(appointment.Status, AppointmentHistoryAction.NoShow);
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+
+        // From the end, not the start: NoShow is terminal, and a patient who is late but arrives
+        // inside their slot has still attended.
+        if (nowUtc < appointment.EndUtc)
+        {
+            return new AppointmentNotEndedYetResult(appointment.EndUtc);
+        }
+
+        // The slot is not touched: the time was consumed, so it stays Booked. No outbox row either
+        // — no contract announces a no-show, and nothing downstream would act on one yet.
+        var fromStatus = appointment.Status;
+        appointment.Status = AppointmentStatus.NoShow;
+        appointment.UpdatedBy = caller.Actor;
+
+        await _historyRepository.AddAsync(
+            new AppointmentHistoryEntry
+            {
+                AppointmentId = appointment.AppointmentId,
+                Action = AppointmentHistoryAction.NoShow,
+                FromStatus = fromStatus,
+                ToStatus = appointment.Status,
+                FromSlotId = appointment.SlotId,
+                FromStartUtc = appointment.StartUtc,
+                Actor = caller.Actor,
+                OccurredAtUtc = nowUtc
+            },
+            cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new AppointmentChangedResult(AppointmentMapping.ToResponse(appointment));
+    }
+
     /// <summary>
     /// Runs one change as a bounded series of attempts, each in its own transaction — the same
     /// shape as <see cref="AppointmentBookingService.BookAsync"/>. A lost race on the slot row (or

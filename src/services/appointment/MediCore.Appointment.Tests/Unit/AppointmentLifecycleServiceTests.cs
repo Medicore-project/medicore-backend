@@ -918,6 +918,188 @@ public sealed class AppointmentLifecycleServiceTests
         AssertNothingChanged(fixture);
     }
 
+    // ── No-show (SCRUM-38) ───────────────────────────────────────────────────
+
+    private static readonly AppointmentCaller FrontDesk = new("desk@medicore.test", IsFrontDesk: true);
+
+    /// <summary>Puts the fixture's appointment wholly in the past: it ended ten minutes ago.</summary>
+    private static Fixture EndedFixture()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-40);
+        fixture.Appointment.EndUtc = Now.AddMinutes(-10);
+        return fixture;
+    }
+
+    [Fact]
+    public async Task The_front_desk_marks_a_no_show_keeps_the_slot_and_records_it()
+    {
+        var fixture = EndedFixture();
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        var changed = Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal(AppointmentStatus.NoShow, changed.Appointment.Status);
+        Assert.Equal(AppointmentStatus.NoShow, fixture.Appointment.Status);
+        Assert.Equal("desk@medicore.test", fixture.Appointment.UpdatedBy);
+
+        // The time was consumed: the slot is neither released nor touched, so nothing is offered.
+        Assert.Equal(SlotStatus.Booked, fixture.Slot.Status);
+        Assert.Null(fixture.Slot.UpdatedBy);
+        Assert.Empty(fixture.Slots.Removed);
+        Assert.Empty(fixture.Waitlist.Offers);
+
+        var entry = Assert.Single(fixture.History.Added);
+        Assert.Equal(AppointmentHistoryAction.NoShow, entry.Action);
+        Assert.Equal(AppointmentStatus.Booked, entry.FromStatus);
+        Assert.Equal(AppointmentStatus.NoShow, entry.ToStatus);
+        Assert.Equal("desk@medicore.test", entry.Actor);
+        Assert.Equal(Now, entry.OccurredAtUtc);
+
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+        Assert.Equal(1, fixture.UnitOfWork.Commits);
+    }
+
+    [Fact]
+    public async Task A_no_show_announces_nothing()
+    {
+        // No contract carries a no-show, and nothing downstream acts on one yet.
+        var fixture = EndedFixture();
+
+        await fixture.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        Assert.Empty(fixture.Outbox.Added);
+    }
+
+    [Fact]
+    public async Task A_no_show_locks_the_appointment_and_never_reads_the_slot()
+    {
+        var fixture = EndedFixture();
+
+        await fixture.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        Assert.Equal(["begin", $"lock appointment {AppointmentId}", "save", "commit"], fixture.Log);
+    }
+
+    [Fact]
+    public async Task The_treating_doctor_can_mark_their_own_no_show()
+    {
+        var fixture = EndedFixture();
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, TreatingDoctor);
+
+        Assert.IsType<AppointmentChangedResult>(result);
+        Assert.Equal(AppointmentStatus.NoShow, fixture.Appointment.Status);
+    }
+
+    [Theory]
+    [InlineData("1111111a-1111-1111-1111-111111111111")] // another doctor
+    [InlineData(null)] // a staff account with no staff profile
+    public async Task A_caller_who_is_not_front_desk_can_only_mark_their_own(string? staffId)
+    {
+        var fixture = EndedFixture();
+        var caller = new AppointmentCaller("someone@medicore.test", StaffId: staffId is null ? null : Guid.Parse(staffId));
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, caller);
+
+        Assert.Equal(new AppointmentNotYourAppointmentResult(AppointmentHistoryAction.NoShow), result);
+        AssertNothingChanged(fixture);
+    }
+
+    [Fact]
+    public async Task The_front_desk_needs_no_staff_id_to_mark_any_doctors_no_show()
+    {
+        // An Admin account may have no staff profile at all; the front desk acts for every doctor.
+        var fixture = EndedFixture();
+        var admin = new AppointmentCaller("admin@medicore.test", StaffId: null, IsFrontDesk: true);
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, admin);
+
+        Assert.IsType<AppointmentChangedResult>(result);
+    }
+
+    [Fact]
+    public async Task Another_doctor_learns_nothing_about_a_no_show_candidates_status()
+    {
+        var fixture = EndedFixture();
+        fixture.Appointment.Status = AppointmentStatus.Cancelled;
+        var otherDoctor = new AppointmentCaller("other@medicore.test", StaffId: OtherDoctorId);
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, otherDoctor);
+
+        Assert.IsType<AppointmentNotYourAppointmentResult>(result);
+    }
+
+    [Fact]
+    public async Task A_no_show_can_be_marked_from_the_end_time_but_not_before()
+    {
+        // Inclusive at the end. A minute before it the patient may still walk in, and the status is
+        // terminal, so it is refused.
+        var atEnd = new Fixture();
+        atEnd.Appointment.StartUtc = Now.AddMinutes(-30);
+        atEnd.Appointment.EndUtc = Now;
+        var early = new Fixture();
+        early.Appointment.StartUtc = Now.AddMinutes(-29);
+        early.Appointment.EndUtc = Now.AddMinutes(1);
+
+        var atEndResult = await atEnd.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+        var earlyResult = await early.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        Assert.IsType<AppointmentChangedResult>(atEndResult);
+        Assert.Equal(new AppointmentNotEndedYetResult(Now.AddMinutes(1)), earlyResult);
+        AssertNothingChanged(early);
+    }
+
+    [Fact]
+    public async Task An_appointment_that_has_started_but_not_ended_is_not_yet_a_no_show()
+    {
+        var fixture = new Fixture();
+        fixture.Appointment.StartUtc = Now.AddMinutes(-5);
+        fixture.Appointment.EndUtc = Now.AddMinutes(25);
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        Assert.IsType<AppointmentNotEndedYetResult>(result);
+    }
+
+    [Theory]
+    [InlineData(AppointmentStatus.Cancelled)]
+    [InlineData(AppointmentStatus.Completed)]
+    [InlineData(AppointmentStatus.NoShow)]
+    public async Task Only_a_booked_appointment_can_be_marked_a_no_show(string status)
+    {
+        var fixture = EndedFixture();
+        fixture.Appointment.Status = status;
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        Assert.Equal(new AppointmentInvalidTransitionResult(status, AppointmentHistoryAction.NoShow), result);
+        AssertNothingChanged(fixture, expectedStatus: status);
+    }
+
+    [Fact]
+    public async Task The_status_is_checked_before_the_end_time()
+    {
+        // A future appointment that was cancelled answers "cancelled", not "not ended yet".
+        var fixture = new Fixture();
+        fixture.Appointment.Status = AppointmentStatus.Cancelled;
+
+        var result = await fixture.Service.MarkNoShowAsync(AppointmentId, FrontDesk);
+
+        Assert.IsType<AppointmentInvalidTransitionResult>(result);
+    }
+
+    [Fact]
+    public async Task Marking_an_unknown_appointment_a_no_show_is_not_found()
+    {
+        var fixture = EndedFixture();
+
+        var result = await fixture.Service.MarkNoShowAsync(Guid.NewGuid(), FrontDesk);
+
+        Assert.IsType<AppointmentNotFoundResult>(result);
+        AssertNothingChanged(fixture);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static void AssertNothingChangedBy(Fixture fixture, string expectedNewSlotStatus)

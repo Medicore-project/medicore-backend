@@ -76,7 +76,7 @@ scrape_configs:
           env: local
 
   # --------------------------------------------------------------------------
-  # Appointment service  (port 5003 — add when implemented)
+  # Appointment service  (dotnet run → http://localhost:5003/metrics)
   # --------------------------------------------------------------------------
   - job_name: appointment-api
     scrape_interval: 10s

@@ -383,6 +383,98 @@ public sealed class AppointmentChangesControllerTests
         Assert.Equal("This appointment is Completed and can no longer be completed.", ProblemOf(result).Title);
     }
 
+    // ── No-show ──────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Receptionist")]
+    public async Task The_front_desk_marks_a_no_show_as_front_desk(string role)
+    {
+        var service = new StubLifecycleService();
+        var controller = CreateController(
+            service,
+            new Claim(ClaimTypes.Role, role),
+            new Claim(ClaimTypes.Email, "desk@medicore.test"));
+
+        var result = await controller.MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        var call = Assert.Single(service.NoShows);
+        Assert.Equal(AppointmentId, call.AppointmentId);
+        Assert.True(call.Caller.IsFrontDesk);
+        Assert.Equal("desk@medicore.test", call.Caller.Actor);
+        Assert.Null(call.Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_doctor_marks_a_no_show_with_their_staff_id_and_not_as_front_desk()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await DoctorController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        var call = Assert.Single(service.NoShows);
+        Assert.False(call.Caller.IsFrontDesk);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+    }
+
+    [Fact]
+    public async Task Another_doctors_no_show_is_403_in_no_show_words()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentNotYourAppointmentResult(AppointmentHistoryAction.NoShow)
+        };
+
+        var result = await DoctorController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, StatusCodeOf(result));
+        Assert.Equal("A doctor can only mark their own appointments as a no-show.", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_no_show_before_the_end_is_400_naming_the_end_in_colombo_time()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentNotEndedYetResult(StartUtc.AddMinutes(30))
+        };
+
+        var result = await StaffController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment runs until 11:00 on 26 Sep 2026 and cannot be marked a no-show before then.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_no_show_on_a_completed_appointment_is_409_in_readable_words()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Completed, AppointmentHistoryAction.NoShow)
+        };
+
+        var result = await StaffController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment is Completed and can no longer be marked a no-show.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task An_unknown_appointment_is_404_for_a_no_show()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotFoundResult() };
+
+        var result = await StaffController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status404NotFound, StatusCodeOf(result));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static int? StatusCodeOf(IActionResult result) => result switch
@@ -442,6 +534,17 @@ public sealed class AppointmentChangesControllerTests
         public List<(Guid AppointmentId, Guid NewSlotId, AppointmentCaller Caller)> Reschedules { get; } = [];
 
         public List<(Guid AppointmentId, string Notes, AppointmentCaller Caller)> Completions { get; } = [];
+
+        public List<(Guid AppointmentId, AppointmentCaller Caller)> NoShows { get; } = [];
+
+        public Task<AppointmentChangeResult> MarkNoShowAsync(
+            Guid appointmentId,
+            AppointmentCaller caller,
+            CancellationToken cancellationToken = default)
+        {
+            NoShows.Add((appointmentId, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.NoShow)));
+        }
 
         public Task<AppointmentChangeResult> CompleteAsync(
             Guid appointmentId,
