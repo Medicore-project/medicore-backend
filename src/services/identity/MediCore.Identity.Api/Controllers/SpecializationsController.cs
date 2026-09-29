@@ -1,12 +1,22 @@
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Entities;
 using MediCore.Identity.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Identity.Api.Controllers;
 
+/// <summary>
+/// Medical specializations.
+/// </summary>
+/// <remarks>
+/// Same split as <see cref="DepartmentsController"/>: reading is front-desk work (who holds which
+/// specialization), changing the list is Admin's. The action-level <c>AdminOnly</c> combines with
+/// the controller's <c>FrontDesk</c> rather than replacing it.
+/// </remarks>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "FrontDesk")]
 public class SpecializationsController : ControllerBase
 {
     private readonly ISpecializationRepository _repository;
@@ -38,6 +48,7 @@ public class SpecializationsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreateSpecializationRequest request, CancellationToken cancellationToken)
     {
         var trimmedName = request.Name?.Trim() ?? string.Empty;
@@ -62,6 +73,7 @@ public class SpecializationsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSpecializationRequest request, CancellationToken cancellationToken)
     {
         var trimmedName = request.Name?.Trim() ?? string.Empty;
@@ -86,6 +98,7 @@ public class SpecializationsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var specialization = await _repository.GetByIdAsync(id, cancellationToken);

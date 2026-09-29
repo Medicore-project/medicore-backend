@@ -1,0 +1,48 @@
+using FluentValidation;
+using MediCore.Appointment.Application.Scheduling;
+using MediCore.Appointment.Application.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace MediCore.Appointment.Application;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddApplication(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
+
+        services.Configure<SchedulingOptions>(
+            configuration.GetSection(SchedulingOptions.SectionName));
+        services.Configure<CancellationPolicyOptions>(
+            configuration.GetSection(CancellationPolicyOptions.SectionName));
+        services.Configure<WaitlistOptions>(
+            configuration.GetSection(WaitlistOptions.SectionName));
+
+        services.AddScoped<ISlotGenerator, SlotGenerator>();
+        services.AddScoped<ISlotReconciler, SlotReconciler>();
+        services.AddScoped<IScheduleOverlapDetector, ScheduleOverlapDetector>();
+        services.AddScoped<IScheduleRevisionService, ScheduleRevisionService>();
+        services.AddScoped<IDoctorScheduleService, DoctorScheduleService>();
+        services.AddScoped<ISlotService, SlotService>();
+        services.AddScoped<IAppointmentBookingService, AppointmentBookingService>();
+        services.AddScoped<IAppointmentQueryService, AppointmentQueryService>();
+        services.AddScoped<IAppointmentLifecycleService, AppointmentLifecycleService>();
+        services.AddScoped<IPublicHolidayService, PublicHolidayService>();
+        services.AddScoped<IDoctorLeaveService, DoctorLeaveService>();
+        services.AddScoped<IStaffEventHandler, StaffEventHandler>();
+        services.AddScoped<IDoctorDirectoryService, DoctorDirectoryService>();
+        services.AddScoped<IWaitlistService, WaitlistService>();
+        services.AddScoped<IWaitlistOfferer, WaitlistOfferer>();
+        services.AddScoped<IWaitlistChangeService, WaitlistChangeService>();
+        services.AddScoped<IWaitlistSweeper, WaitlistSweeper>();
+        services.AddScoped<IUtilisationReportService, UtilisationReportService>();
+
+        // Injected into application services so tests can pin "now" without touching the clock.
+        services.AddSingleton(TimeProvider.System);
+
+        return services;
+    }
+}

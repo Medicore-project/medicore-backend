@@ -63,7 +63,12 @@ public class AuthController : ControllerBase
         var response = new AuthResponse(
             accessToken,
             refreshTokenString,
-            new UserDto(user.Id, user.Email, user.Role, $"{user.StaffProfile?.FirstName} {user.StaffProfile?.LastName}".Trim())
+            new UserDto(
+                user.Id,
+                user.Email,
+                user.Role,
+                $"{user.StaffProfile?.FirstName} {user.StaffProfile?.LastName}".Trim(),
+                user.StaffProfile?.Id)
         );
 
         return Ok(response);
@@ -103,7 +108,12 @@ public class AuthController : ControllerBase
         var response = new AuthResponse(
             newAccessToken,
             newRefreshTokenString,
-            new UserDto(user.Id, user.Email, user.Role, $"{user.StaffProfile?.FirstName} {user.StaffProfile?.LastName}".Trim())
+            new UserDto(
+                user.Id,
+                user.Email,
+                user.Role,
+                $"{user.StaffProfile?.FirstName} {user.StaffProfile?.LastName}".Trim(),
+                user.StaffProfile?.Id)
         );
 
         return Ok(response);

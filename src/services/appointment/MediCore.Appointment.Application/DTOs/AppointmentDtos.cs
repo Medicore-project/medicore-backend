@@ -1,0 +1,121 @@
+namespace MediCore.Appointment.Application.DTOs;
+
+/// <summary>
+/// Books one slot for one patient.
+/// </summary>
+/// <param name="SlotId">The slot's business key, from the availability listing.</param>
+/// <param name="PatientId">
+/// Who the visit is for. <strong>Ignored when the caller presents a booking token</strong>, which
+/// names exactly one patient in its <c>patientId</c> claim — only staff booking on someone's behalf
+/// ever supply this.
+/// </param>
+/// <param name="ServiceCode">
+/// What the visit will be billed as, one of the <c>ServiceCodes</c> constants. Optional; omitting
+/// it means a general consultation.
+/// </param>
+public sealed record BookAppointmentRequest(Guid SlotId, Guid PatientId, string? ServiceCode);
+
+/// <summary>
+/// Who the booking is for, in the form a person recognises — copied onto the appointment so staff
+/// can see who booked. Both parts are null when the caller had nothing trustworthy to supply.
+/// </summary>
+public sealed record BookingPatientDetails(string? PatientNumber, string? PatientName)
+{
+    public static readonly BookingPatientDetails None = new(null, null);
+}
+
+/// <summary>A confirmed booking.</summary>
+public sealed record AppointmentResponse(
+    Guid AppointmentId,
+    Guid PatientId,
+    string? PatientNumber,
+    string? PatientName,
+    Guid DoctorId,
+    Guid SlotId,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    DateOnly SlotDate,
+    int DurationMinutes,
+    string ServiceCode,
+    string Status,
+    DateTime CreatedAt);
+
+/// <summary>
+/// One appointment as clinic staff see it in the booking grid and the appointments list — who it
+/// is for, with whom, and when.
+/// </summary>
+/// <param name="PatientNumber">Null for a booking made with a bare patient id; see the entity.</param>
+/// <param name="DoctorName">Null only when the doctor cache has never heard of the doctor.</param>
+public sealed record AppointmentSummaryResponse(
+    Guid AppointmentId,
+    Guid PatientId,
+    string? PatientNumber,
+    string? PatientName,
+    Guid DoctorId,
+    string? DoctorName,
+    string? Specialization,
+    Guid SlotId,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    DateOnly SlotDate,
+    int DurationMinutes,
+    string ServiceCode,
+    string Status,
+    DateTime CreatedAt);
+
+/// <summary>One of the caller's own upcoming appointments, for the public booking page.</summary>
+/// <remarks>
+/// Reduced on purpose, like the other public DTOs: no patient id, no slot id, no audit columns. The
+/// caller already knows who they are; what they need is with whom and when.
+/// <para>
+/// <c>DoctorId</c> was added in SCRUM-36 so the page can list that doctor's free times for a
+/// reschedule. It reveals nothing new: the public doctor listing already publishes every id.
+/// </para>
+/// </remarks>
+public sealed record PatientAppointmentResponse(
+    Guid AppointmentId,
+    Guid DoctorId,
+    string? DoctorName,
+    string? Specialization,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    DateOnly SlotDate,
+    int DurationMinutes,
+    string ServiceCode,
+    string Status);
+
+/// <summary>
+/// One entry in an appointment's history: what changed, from what to what, who did it and when.
+/// </summary>
+/// <param name="Action">Booked, Rescheduled, Cancelled or Completed.</param>
+/// <param name="FromStatus">Null for the booking that created the appointment.</param>
+/// <param name="Reason">A cancellation's reason; null otherwise.</param>
+public sealed record AppointmentHistoryResponse(
+    string Action,
+    string? FromStatus,
+    string ToStatus,
+    Guid? FromSlotId,
+    Guid? ToSlotId,
+    DateTime? FromStartUtc,
+    DateTime? ToStartUtc,
+    string? Reason,
+    string Actor,
+    DateTime OccurredAtUtc);
+
+/// <summary>Cancels a booked appointment.</summary>
+/// <param name="Reason">
+/// Why — recorded in the appointment history and carried on <c>appointment.cancelled</c>.
+/// Required, at most 500 characters.
+/// </param>
+public sealed record CancelAppointmentRequest(string Reason);
+
+/// <summary>Moves a booked appointment to another slot with the same doctor.</summary>
+/// <param name="NewSlotId">The slot's business key, from the availability listing.</param>
+public sealed record RescheduleAppointmentRequest(Guid NewSlotId);
+
+/// <summary>Marks a booked appointment completed.</summary>
+/// <param name="Notes">
+/// The doctor's clinical notes. They travel on <c>appointment.completed</c> and become the
+/// patient's medical record entry for this visit. Required, at most 8000 characters.
+/// </param>
+public sealed record CompleteAppointmentRequest(string Notes);

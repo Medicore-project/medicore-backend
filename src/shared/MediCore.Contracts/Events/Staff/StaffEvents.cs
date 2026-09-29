@@ -21,6 +21,11 @@ public sealed record StaffUpdatedEvent : IntegrationEvent
     public required string FullName { get; init; }
     public required string Specialization { get; init; }
     public required Guid DepartmentId { get; init; }
+
+    // Added after v1 shipped, so optional: payloads published before these existed still
+    // deserialize, and consumers must treat null as "not stated" rather than a real value.
+    public string? Role { get; init; }
+    public bool? IsActive { get; init; }
 }
 
 public sealed record StaffDeactivatedEvent : IntegrationEvent

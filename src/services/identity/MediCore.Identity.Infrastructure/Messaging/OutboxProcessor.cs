@@ -55,6 +55,7 @@ public sealed class OutboxProcessor : BackgroundService
             try
             {
                 await publisher.PublishAsync(
+                    message.Id,
                     message.Topic,
                     message.EventKey,
                     message.EventType,

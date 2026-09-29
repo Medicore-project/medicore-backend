@@ -1,0 +1,26 @@
+# =============================================================================
+# MediCore — Kafka & Dead-Letter Topic Alerting Rules
+# =============================================================================
+
+groups:
+  - name: kafka-dlt-alerts
+    rules:
+      - alert: KafkaDeadLetterQueueNotEmpty
+        expr: sum by (topic) (kafka_topic_partition_current_offset{topic=~".*\\.dlt"}) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: devops
+        annotations:
+          summary: "Kafka dead-letter topic {{ $labels.topic }} contains failed messages"
+          description: "Topic {{ $labels.topic }} has depth {{ $value }}. Messages failed processing after maximum retries and were routed to the dead-letter topic."
+
+      - alert: KafkaConsumerLagHigh
+        expr: sum by (consumergroup, topic) (kafka_consumergroup_lag) > 50
+        for: 1m
+        labels:
+          severity: warning
+          team: devops
+        annotations:
+          summary: "High Kafka consumer lag for group {{ $labels.consumergroup }}"
+          description: "Consumer group {{ $labels.consumergroup }} has a lag of {{ $value }} messages on topic {{ $labels.topic }}."

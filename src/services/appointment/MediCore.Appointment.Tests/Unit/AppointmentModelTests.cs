@@ -1,0 +1,212 @@
+using MediCore.Appointment.Application.Entities;
+using MediCore.Appointment.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using AppointmentEntity = MediCore.Appointment.Application.Entities.Appointment;
+
+namespace MediCore.Appointment.Tests.Unit;
+
+public sealed class AppointmentModelTests
+{
+    [Fact]
+    public void Appointment_maps_to_appointments_with_a_soft_delete_filter()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity));
+
+        Assert.NotNull(entityType);
+        Assert.Equal("appointments", entityType.GetTableName());
+        Assert.Equal(AppointmentDbContext.SchemaName, entityType.GetSchema());
+        Assert.NotNull(entityType.GetQueryFilter());
+    }
+
+    [Fact]
+    public void Appointment_id_is_the_unique_business_key()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ux_appointments_appointment_id");
+
+        Assert.True(index.IsUnique);
+        Assert.Equal([nameof(AppointmentEntity.AppointmentId)], index.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void One_active_appointment_per_slot_is_what_actually_prevents_double_booking()
+    {
+        // Booking mutates a slot rather than inserting one, so ux_slots_doctor_start can never
+        // fire on a concurrent booking: both racers read Available and both write Booked to the
+        // same row successfully. This index is the only thing that makes one of them lose, and
+        // AppointmentUnitOfWork matches it by name — so the filter is asserted byte for byte.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ux_appointments_slot");
+
+        Assert.True(index.IsUnique);
+        Assert.Equal([nameof(AppointmentEntity.SlotId)], index.Properties.Select(p => p.Name));
+        Assert.Equal("\"IsDeleted\" = false AND \"Status\" <> 'Cancelled'", index.GetFilter());
+    }
+
+    [Fact]
+    public void The_patient_overlap_check_is_indexed_on_patient_then_start()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ix_appointments_patient_start");
+
+        Assert.Equal(
+            [nameof(AppointmentEntity.PatientId), nameof(AppointmentEntity.StartUtc)],
+            index.Properties.Select(p => p.Name));
+        Assert.False(index.IsUnique);
+    }
+
+    [Fact]
+    public void The_clinic_list_is_indexed_on_date_then_doctor()
+    {
+        // Date first, so the clinic-wide list uses the index as well as the per-doctor grid.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ix_appointments_date_doctor");
+
+        Assert.Equal(
+            [nameof(AppointmentEntity.SlotDate), nameof(AppointmentEntity.DoctorId)],
+            index.Properties.Select(p => p.Name));
+        Assert.False(index.IsUnique);
+    }
+
+    [Fact]
+    public void A_new_appointment_is_booked_and_generally_billed()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        Assert.Equal(
+            AppointmentStatus.Booked,
+            entityType.FindProperty(nameof(AppointmentEntity.Status))!.GetDefaultValue());
+        Assert.Equal(
+            ServiceCodes.GeneralConsultation,
+            entityType.FindProperty(nameof(AppointmentEntity.ServiceCode))!.GetDefaultValue());
+    }
+
+    [Fact]
+    public void The_patient_snapshot_is_optional_and_sized_to_the_patient_service_columns()
+    {
+        // Optional because a staff API booking with a bare patientId has nothing to copy.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentEntity))!;
+
+        var number = entityType.FindProperty(nameof(AppointmentEntity.PatientNumber))!;
+        var name = entityType.FindProperty(nameof(AppointmentEntity.PatientName))!;
+
+        Assert.True(number.IsNullable);
+        Assert.Equal(20, number.GetMaxLength());
+        Assert.True(name.IsNullable);
+        Assert.Equal(256, name.GetMaxLength());
+    }
+
+    [Fact]
+    public void The_slot_row_carries_an_optimistic_concurrency_token_mapped_to_xmin()
+    {
+        // SCRUM-35. The database changes xmin on every write, so a writer whose read of the slot
+        // has gone stale matches no row and loses — without any writer having to bump a counter.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(Slot))!;
+
+        var version = entityType.FindProperty("Version");
+
+        Assert.NotNull(version);
+        Assert.True(version.IsShadowProperty());
+        Assert.True(version.IsConcurrencyToken);
+        Assert.Equal(typeof(uint), version.ClrType);
+        Assert.Equal(Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.OnAddOrUpdate, version.ValueGenerated);
+        Assert.Equal("xmin", version.GetColumnName());
+    }
+
+    [Fact]
+    public void Only_the_slot_carries_a_concurrency_token()
+    {
+        // Appointments are guarded by ux_appointments_slot instead. A token on them would turn a
+        // harmless concurrent status read into a conflict for no gain.
+        using var context = CreateContext();
+
+        var tokenOwners = context.Model.GetEntityTypes()
+            .Where(type => type.GetProperties().Any(property => property.IsConcurrencyToken))
+            .Select(type => type.ClrType)
+            .ToList();
+
+        Assert.Equal([typeof(Slot)], tokenOwners);
+    }
+
+    [Fact]
+    public void History_maps_to_an_append_only_table_indexed_by_appointment_then_time()
+    {
+        // SCRUM-36. No soft-delete filter: nothing removes a history entry, so there is nothing
+        // to filter out.
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentHistoryEntry));
+
+        Assert.NotNull(entityType);
+        Assert.Equal("appointment_history", entityType.GetTableName());
+        Assert.Equal(AppointmentDbContext.SchemaName, entityType.GetSchema());
+        Assert.Null(entityType.GetQueryFilter());
+        Assert.Null(entityType.FindProperty("IsDeleted"));
+
+        var index = Assert.Single(entityType.GetIndexes(), i =>
+            i.GetDatabaseName() == "ix_appointment_history_appointment_occurred");
+
+        Assert.False(index.IsUnique);
+        Assert.Equal(
+            [nameof(AppointmentHistoryEntry.AppointmentId), nameof(AppointmentHistoryEntry.OccurredAtUtc)],
+            index.Properties.Select(p => p.Name));
+    }
+
+    [Fact]
+    public void History_columns_are_sized_to_what_they_hold()
+    {
+        using var context = CreateContext();
+        var entityType = context.Model.FindEntityType(typeof(AppointmentHistoryEntry))!;
+
+        // Statuses share the appointments.Status width, so any status fits either column.
+        Assert.Equal(20, entityType.FindProperty(nameof(AppointmentHistoryEntry.FromStatus))!.GetMaxLength());
+        Assert.Equal(20, entityType.FindProperty(nameof(AppointmentHistoryEntry.ToStatus))!.GetMaxLength());
+        Assert.Equal(500, entityType.FindProperty(nameof(AppointmentHistoryEntry.Reason))!.GetMaxLength());
+        Assert.Equal(100, entityType.FindProperty(nameof(AppointmentHistoryEntry.Actor))!.GetMaxLength());
+        Assert.True(entityType.FindProperty(nameof(AppointmentHistoryEntry.FromStatus))!.IsNullable);
+        Assert.False(entityType.FindProperty(nameof(AppointmentHistoryEntry.ToStatus))!.IsNullable);
+    }
+
+    [Theory]
+    [InlineData(ServiceCodes.GeneralConsultation)]
+    [InlineData(ServiceCodes.SpecialistConsultation)]
+    [InlineData(ServiceCodes.FollowUp)]
+    public void Every_listed_service_code_is_known(string code)
+    {
+        Assert.True(ServiceCodes.IsKnown(code));
+        Assert.Contains(code, ServiceCodes.All);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("NOPE")]
+    // Case-sensitive on purpose: the code is stored and published verbatim, so accepting a second
+    // spelling would put two names for one service on the topic.
+    [InlineData("gen-consult")]
+    public void Anything_not_on_the_list_is_unknown(string? code)
+    {
+        Assert.False(ServiceCodes.IsKnown(code));
+    }
+
+    private static AppointmentDbContext CreateContext() =>
+        new(new DbContextOptionsBuilder<AppointmentDbContext>()
+            .UseNpgsql("Host=localhost;Database=unused;Username=unused;Password=unused")
+            .Options);
+}

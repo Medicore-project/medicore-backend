@@ -1,12 +1,23 @@
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Entities;
 using MediCore.Identity.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Identity.Api.Controllers;
 
+/// <summary>
+/// Hospital departments.
+/// </summary>
+/// <remarks>
+/// Reading is front-desk work — a receptionist needs to know which departments exist and who staffs
+/// them — so the controller sits behind <c>FrontDesk</c>. Changing the list is not: each write
+/// additionally requires <c>AdminOnly</c>, which ASP.NET combines with the controller policy rather
+/// than replacing it, so a receptionist reaches every GET and no POST/PUT/DELETE.
+/// </remarks>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Policy = "FrontDesk")]
 public class DepartmentsController : ControllerBase
 {
     private readonly IDepartmentRepository _repository;
@@ -38,6 +49,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentRequest request, CancellationToken cancellationToken)
     {
         var trimmedName = request.Name?.Trim() ?? string.Empty;
@@ -62,6 +74,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDepartmentRequest request, CancellationToken cancellationToken)
     {
         var trimmedName = request.Name?.Trim() ?? string.Empty;
@@ -86,6 +99,7 @@ public class DepartmentsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var department = await _repository.GetByIdAsync(id, cancellationToken);

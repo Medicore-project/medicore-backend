@@ -46,3 +46,5 @@ public record PagedResult<T>(
     public bool HasPreviousPage => Page > 1;
     public bool HasNextPage => Page < TotalPages;
 }
+
+public record RepublishDoctorsResponse(int Queued);

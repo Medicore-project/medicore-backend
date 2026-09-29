@@ -77,7 +77,9 @@ WORKDIR /app
 COPY --from=publish /app/publish .
 
 USER root
-RUN apt-get update && apt-get install -y wget fontconfig libfreetype6 && rm -rf /var/lib/apt/lists/*
+# apt over HTTPS: some networks intercept plain-HTTP apt traffic and answer 403.
+RUN sed -i "s|http://deb.debian.org|https://deb.debian.org|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y wget fontconfig libfreetype6 && rm -rf /var/lib/apt/lists/*
 USER app
 
 EXPOSE 8080

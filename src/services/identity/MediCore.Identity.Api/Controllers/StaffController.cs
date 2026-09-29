@@ -1,12 +1,24 @@
 using FluentValidation;
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediCore.Identity.Api.Controllers;
 
+/// <summary>
+/// Staff profiles and their role assignments.
+/// </summary>
+/// <remarks>
+/// Reading is open to any signed-in user because the whole application leans on it: the booking
+/// grid and leave pages list doctors, and the department and specialization pages list who is
+/// assigned where. Creating staff, editing them, deactivating them and granting roles are all
+/// Admin's alone — the action-level <c>AdminOnly</c> combines with the controller's blanket
+/// authentication rather than replacing it.
+/// </remarks>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class StaffController : ControllerBase
 {
     private readonly IStaffRepository _staffRepository;
@@ -37,13 +49,14 @@ public class StaffController : ControllerBase
         [FromQuery] Guid? departmentId = null,
         [FromQuery] string? role = null,
         [FromQuery] bool? isActive = null,
+        [FromQuery] string? specialization = null,
         CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
         if (pageSize < 1 || pageSize > 100) pageSize = 20;
 
         var result = await _staffRepository.GetPagedAsync(
-            page, pageSize, search, departmentId, role, isActive, cancellationToken);
+            page, pageSize, search, departmentId, role, isActive, specialization, cancellationToken);
 
         return Ok(result);
     }
@@ -59,6 +72,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create(
         [FromBody] CreateStaffRequest request,
         CancellationToken cancellationToken)
@@ -78,6 +92,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateStaffRequest request,
@@ -95,6 +110,7 @@ public class StaffController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var deactivated = await _staffRepository.DeactivateStaffAsync(id, cancellationToken);
@@ -104,7 +120,29 @@ public class StaffController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Re-announces every doctor on staff-events so downstream caches can backfill.
+    /// </summary>
+    /// <remarks>
+    /// Kafka keeps staff-events for 7 days, so a consumer that starts later never sees the original
+    /// events for doctors created before then. Run once after such a consumer is first deployed.
+    /// Safe to repeat: each event carries full current state, so replays converge on the same result.
+    /// Events are published asynchronously through the outbox, hence 202 rather than 200.
+    /// </remarks>
+    [HttpPost("doctors/republish")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(typeof(RepublishDoctorsResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RepublishDoctors(CancellationToken cancellationToken)
+    {
+        var queued = await _staffRepository.QueueDoctorRepublishAsync(cancellationToken);
+
+        return Accepted(new RepublishDoctorsResponse(queued));
+    }
+
     [HttpPost("{id:guid}/roles")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> AssignRole(
         Guid id,
         [FromBody] AssignRoleRequest request,

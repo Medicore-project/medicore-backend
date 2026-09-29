@@ -1,0 +1,596 @@
+using System.Security.Claims;
+using MediCore.Appointment.Api.Authorization;
+using MediCore.Appointment.Api.Controllers;
+using MediCore.Appointment.Application.DTOs;
+using MediCore.Appointment.Application.Entities;
+using MediCore.Appointment.Application.Services;
+using MediCore.Appointment.Application.Validators;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace MediCore.Appointment.Tests.Unit;
+
+public sealed class AppointmentChangesControllerTests
+{
+    private static readonly Guid AppointmentId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid PatientId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid StaffId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+    /// <summary>10:30 Colombo time on 26 Sep 2026.</summary>
+    private static readonly DateTime StartUtc = new(2026, 9, 26, 5, 0, 0, DateTimeKind.Utc);
+
+    // ── Cancel: who the service is told is calling ──────────────────────────
+
+    [Fact]
+    public async Task Staff_cancel_on_behalf_of_the_patient_with_no_patient_restriction()
+    {
+        var service = new StubLifecycleService();
+        var controller = StaffController(service);
+
+        await controller.Cancel(AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        var call = Assert.Single(service.Cancels);
+        Assert.Equal(AppointmentId, call.AppointmentId);
+        Assert.Equal("Travelling", call.Reason);
+        Assert.Equal("desk@medicore.test", call.Caller.Actor);
+        Assert.Null(call.Caller.PatientId);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+    }
+
+    [Fact]
+    public async Task A_patient_cancels_as_the_patient_their_token_names()
+    {
+        var service = new StubLifecycleService();
+        var controller = PatientController(service);
+
+        await controller.CancelMine(AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.Equal(PatientId, Assert.Single(service.Cancels).Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_patient_cancellation_answers_204_rather_than_the_full_appointment()
+    {
+        // The public DTOs never carry the patient or slot id; the page reloads its own list.
+        var controller = PatientController(new StubLifecycleService());
+
+        var result = await controller.CancelMine(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
+    public async Task A_token_without_a_usable_patient_claim_is_refused()
+    {
+        var service = new StubLifecycleService();
+        var controller = CreateController(service, new Claim(AppointmentAuthorizationPolicies.PatientIdClaim, "nope"));
+
+        var result = await controller.CancelMine(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, StatusCodeOf(result));
+        Assert.Empty(service.Cancels);
+    }
+
+    [Fact]
+    public async Task A_cancellation_without_a_reason_is_a_validation_problem_and_never_reaches_the_service()
+    {
+        var service = new StubLifecycleService();
+        var controller = StaffController(service);
+
+        var result = await controller.Cancel(AppointmentId, new CancelAppointmentRequest(" "), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        var problem = Assert.IsType<ValidationProblemDetails>(Assert.IsAssignableFrom<ObjectResult>(result).Value);
+        Assert.Contains("reason", problem.Errors.Keys);
+        Assert.Empty(service.Cancels);
+    }
+
+    // ── Results to status codes ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_staff_cancellation_returns_the_updated_appointment()
+    {
+        var controller = StaffController(new StubLifecycleService());
+
+        var result = await controller.Cancel(AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(AppointmentStatus.Cancelled, Assert.IsType<AppointmentResponse>(ok.Value).Status);
+    }
+
+    [Fact]
+    public async Task Not_found_is_404()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotFoundResult() };
+
+        var staff = await StaffController(service).Cancel(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+        var patient = await PatientController(service).CancelMine(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status404NotFound, StatusCodeOf(staff));
+        Assert.Equal(StatusCodes.Status404NotFound, StatusCodeOf(patient));
+    }
+
+    [Fact]
+    public async Task An_invalid_transition_is_409_naming_the_current_status()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Completed, AppointmentHistoryAction.Cancelled)
+        };
+
+        var result = await StaffController(service).Cancel(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment is Completed and can no longer be cancelled.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Inside_the_window_is_400_stating_the_policy_and_the_start_in_colombo_time()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentInsideCancellationWindowResult(24, StartUtc) };
+
+        var result = await StaffController(service).Cancel(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Equal(
+            "Appointments can only be cancelled or rescheduled up to 24 hours before they start. "
+            + "This one starts at 10:30 on 26 Sep 2026.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public void A_one_hour_window_is_worded_in_the_singular()
+    {
+        var title = AppointmentChangesController.DescribeWindow(new AppointmentInsideCancellationWindowResult(1, StartUtc));
+
+        Assert.StartsWith("Appointments can only be cancelled or rescheduled up to 1 hour before", title);
+    }
+
+    [Fact]
+    public void With_no_window_the_message_says_the_appointment_has_started()
+    {
+        var title = AppointmentChangesController.DescribeWindow(new AppointmentInsideCancellationWindowResult(0, StartUtc));
+
+        Assert.Equal(
+            "This appointment started at 10:30 on 26 Sep 2026, so it can no longer be cancelled or rescheduled.",
+            title);
+    }
+
+    [Fact]
+    public async Task Contention_is_409_not_500()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentContendedResult() };
+
+        var result = await StaffController(service).Cancel(
+            AppointmentId, new CancelAppointmentRequest("Travelling"), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+    }
+
+    // ── Reschedule ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Staff_reschedule_with_no_patient_restriction_and_get_the_moved_appointment()
+    {
+        var service = new StubLifecycleService();
+        var newSlotId = Guid.NewGuid();
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(newSlotId), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        var call = Assert.Single(service.Reschedules);
+        Assert.Equal((AppointmentId, newSlotId), (call.AppointmentId, call.NewSlotId));
+        Assert.Null(call.Caller.PatientId);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+    }
+
+    [Fact]
+    public async Task A_patient_reschedules_as_their_token_names_and_gets_204()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await PatientController(service).RescheduleMine(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(PatientId, Assert.Single(service.Reschedules).Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_reschedule_naming_no_slot_never_reaches_the_service()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.Empty), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Empty(service.Reschedules);
+    }
+
+    public static TheoryData<AppointmentChangeResult, int> RescheduleOutcomes() => new()
+    {
+        { new AppointmentNewSlotNotFoundResult(), StatusCodes.Status404NotFound },
+        { new AppointmentDoctorNotFoundResult(), StatusCodes.Status404NotFound },
+        { new AppointmentNewSlotSameAsCurrentResult(), StatusCodes.Status400BadRequest },
+        { new AppointmentNewSlotDifferentDoctorResult(), StatusCodes.Status400BadRequest },
+        { new AppointmentNewSlotInPastResult(StartUtc), StatusCodes.Status400BadRequest },
+        { new AppointmentInsideCancellationWindowResult(24, StartUtc), StatusCodes.Status400BadRequest },
+        { new AppointmentNewSlotNotAvailableResult(SlotStatus.Blocked), StatusCodes.Status409Conflict },
+        { new AppointmentPatientOverlapResult(Guid.NewGuid(), StartUtc, StartUtc.AddMinutes(30)), StatusCodes.Status409Conflict },
+        { new AppointmentSlotTakenResult(), StatusCodes.Status409Conflict },
+        { new AppointmentContendedResult(), StatusCodes.Status409Conflict },
+        { new AppointmentInvalidTransitionResult(AppointmentStatus.Cancelled, AppointmentHistoryAction.Rescheduled), StatusCodes.Status409Conflict }
+    };
+
+    [Theory]
+    [MemberData(nameof(RescheduleOutcomes))]
+    public async Task Every_reschedule_outcome_has_its_status_code(AppointmentChangeResult outcome, int statusCode)
+    {
+        var service = new StubLifecycleService { Result = outcome };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(statusCode, StatusCodeOf(result));
+    }
+
+    [Fact]
+    public async Task A_taken_slot_says_the_appointment_was_not_moved()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentSlotTakenResult() };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Contains("was not moved", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_new_slot_held_for_the_waitlist_is_described_in_words()
+    {
+        // "it is Offered" would read to a patient as if the slot were being offered to them.
+        var service = new StubLifecycleService { Result = new AppointmentNewSlotNotAvailableResult(SlotStatus.Offered) };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal(
+            "This slot is no longer available; it is being held for a patient on the waitlist.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Any_other_unavailable_status_is_named()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNewSlotNotAvailableResult(SlotStatus.Blocked) };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal("This slot is no longer available; it is Blocked.", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_clash_names_the_other_appointment_in_colombo_time()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentPatientOverlapResult(Guid.NewGuid(), StartUtc, StartUtc.AddMinutes(30))
+        };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal(
+            "This patient already has an appointment on 26 Sep 2026 from 10:30 to 11:00.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_rescheduled_invalid_transition_uses_the_right_verb()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Cancelled, AppointmentHistoryAction.Rescheduled)
+        };
+
+        var result = await StaffController(service).Reschedule(
+            AppointmentId, new RescheduleAppointmentRequest(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Equal("This appointment is Cancelled and can no longer be rescheduled.", ProblemOf(result).Title);
+    }
+
+    // ── Complete ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_doctor_completes_as_themselves_with_their_notes()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(AppointmentStatus.Completed, Assert.IsType<AppointmentResponse>(ok.Value).Status);
+        var call = Assert.Single(service.Completions);
+        Assert.Equal("Seen.", call.Notes);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+        Assert.Equal("dr.perera@medicore.test", call.Caller.Actor);
+        Assert.Null(call.Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_completion_without_notes_never_reaches_the_service()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest(""), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Empty(service.Completions);
+    }
+
+    [Fact]
+    public async Task Someone_elses_appointment_is_403()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotYourAppointmentResult() };
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, StatusCodeOf(result));
+        Assert.Equal("Only the appointment's own doctor can complete it.", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Completing_before_the_start_is_400_naming_the_start_in_colombo_time()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotStartedYetResult(StartUtc) };
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment starts at 10:30 on 26 Sep 2026 and cannot be completed before then.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task Completing_twice_is_409()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Completed, AppointmentHistoryAction.Completed)
+        };
+
+        var result = await DoctorController(service).Complete(
+            AppointmentId, new CompleteAppointmentRequest("Seen."), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal("This appointment is Completed and can no longer be completed.", ProblemOf(result).Title);
+    }
+
+    // ── No-show ──────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("Receptionist")]
+    public async Task The_front_desk_marks_a_no_show_as_front_desk(string role)
+    {
+        var service = new StubLifecycleService();
+        var controller = CreateController(
+            service,
+            new Claim(ClaimTypes.Role, role),
+            new Claim(ClaimTypes.Email, "desk@medicore.test"));
+
+        var result = await controller.MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        var call = Assert.Single(service.NoShows);
+        Assert.Equal(AppointmentId, call.AppointmentId);
+        Assert.True(call.Caller.IsFrontDesk);
+        Assert.Equal("desk@medicore.test", call.Caller.Actor);
+        Assert.Null(call.Caller.PatientId);
+    }
+
+    [Fact]
+    public async Task A_doctor_marks_a_no_show_with_their_staff_id_and_not_as_front_desk()
+    {
+        var service = new StubLifecycleService();
+
+        var result = await DoctorController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status200OK, StatusCodeOf(result));
+        var call = Assert.Single(service.NoShows);
+        Assert.False(call.Caller.IsFrontDesk);
+        Assert.Equal(StaffId, call.Caller.StaffId);
+    }
+
+    [Fact]
+    public async Task Another_doctors_no_show_is_403_in_no_show_words()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentNotYourAppointmentResult(AppointmentHistoryAction.NoShow)
+        };
+
+        var result = await DoctorController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status403Forbidden, StatusCodeOf(result));
+        Assert.Equal("A doctor can only mark their own appointments as a no-show.", ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_no_show_before_the_end_is_400_naming_the_end_in_colombo_time()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentNotEndedYetResult(StartUtc.AddMinutes(30))
+        };
+
+        var result = await StaffController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment runs until 11:00 on 26 Sep 2026 and cannot be marked a no-show before then.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task A_no_show_on_a_completed_appointment_is_409_in_readable_words()
+    {
+        var service = new StubLifecycleService
+        {
+            Result = new AppointmentInvalidTransitionResult(AppointmentStatus.Completed, AppointmentHistoryAction.NoShow)
+        };
+
+        var result = await StaffController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status409Conflict, StatusCodeOf(result));
+        Assert.Equal(
+            "This appointment is Completed and can no longer be marked a no-show.",
+            ProblemOf(result).Title);
+    }
+
+    [Fact]
+    public async Task An_unknown_appointment_is_404_for_a_no_show()
+    {
+        var service = new StubLifecycleService { Result = new AppointmentNotFoundResult() };
+
+        var result = await StaffController(service).MarkNoShow(AppointmentId, CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status404NotFound, StatusCodeOf(result));
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static int? StatusCodeOf(IActionResult result) => result switch
+    {
+        ObjectResult objectResult => objectResult.StatusCode,
+        StatusCodeResult statusCodeResult => statusCodeResult.StatusCode,
+        _ => null
+    };
+
+    private static ProblemDetails ProblemOf(IActionResult result) =>
+        Assert.IsAssignableFrom<ProblemDetails>(Assert.IsAssignableFrom<ObjectResult>(result).Value);
+
+    private static AppointmentChangesController StaffController(IAppointmentLifecycleService service) =>
+        CreateController(
+            service,
+            new Claim(ClaimTypes.Role, "Receptionist"),
+            new Claim(ClaimTypes.Email, "desk@medicore.test"),
+            new Claim("staffId", StaffId.ToString()));
+
+    private static AppointmentChangesController DoctorController(IAppointmentLifecycleService service) =>
+        CreateController(
+            service,
+            new Claim(ClaimTypes.Role, "Doctor"),
+            new Claim(ClaimTypes.Email, "dr.perera@medicore.test"),
+            new Claim("staffId", StaffId.ToString()));
+
+    private static AppointmentChangesController PatientController(IAppointmentLifecycleService service) =>
+        CreateController(
+            service,
+            new Claim(AppointmentAuthorizationPolicies.PatientIdClaim, PatientId.ToString()));
+
+    private static AppointmentChangesController CreateController(
+        IAppointmentLifecycleService service,
+        params Claim[] claims)
+    {
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
+        };
+
+        return new AppointmentChangesController(
+            new CancelAppointmentRequestValidator(),
+            new RescheduleAppointmentRequestValidator(),
+            new CompleteAppointmentRequestValidator(),
+            service)
+        {
+            ControllerContext = new ControllerContext { HttpContext = context }
+        };
+    }
+
+    private sealed class StubLifecycleService : IAppointmentLifecycleService
+    {
+        public AppointmentChangeResult? Result { get; set; }
+
+        public List<(Guid AppointmentId, string Reason, AppointmentCaller Caller)> Cancels { get; } = [];
+
+        public List<(Guid AppointmentId, Guid NewSlotId, AppointmentCaller Caller)> Reschedules { get; } = [];
+
+        public List<(Guid AppointmentId, string Notes, AppointmentCaller Caller)> Completions { get; } = [];
+
+        public List<(Guid AppointmentId, AppointmentCaller Caller)> NoShows { get; } = [];
+
+        public Task<AppointmentChangeResult> MarkNoShowAsync(
+            Guid appointmentId,
+            AppointmentCaller caller,
+            CancellationToken cancellationToken = default)
+        {
+            NoShows.Add((appointmentId, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.NoShow)));
+        }
+
+        public Task<AppointmentChangeResult> CompleteAsync(
+            Guid appointmentId,
+            string notes,
+            AppointmentCaller caller,
+            string correlationId,
+            CancellationToken cancellationToken = default)
+        {
+            Completions.Add((appointmentId, notes, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.Completed)));
+        }
+
+        public Task<AppointmentChangeResult> RescheduleAsync(
+            Guid appointmentId,
+            Guid newSlotId,
+            AppointmentCaller caller,
+            CancellationToken cancellationToken = default)
+        {
+            Reschedules.Add((appointmentId, newSlotId, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.Booked)));
+        }
+
+        public Task<AppointmentChangeResult> CancelAsync(
+            Guid appointmentId,
+            string reason,
+            AppointmentCaller caller,
+            string correlationId,
+            CancellationToken cancellationToken = default)
+        {
+            Cancels.Add((appointmentId, reason, caller));
+            return Task.FromResult(Result ?? new AppointmentChangedResult(Response(AppointmentStatus.Cancelled)));
+        }
+
+        private static AppointmentResponse Response(string status) => new(
+            AppointmentId,
+            PatientId,
+            "PAT-000123",
+            "Kamala Silva",
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            StartUtc,
+            StartUtc.AddMinutes(30),
+            new DateOnly(2026, 9, 26),
+            30,
+            ServiceCodes.GeneralConsultation,
+            status,
+            StartUtc.AddDays(-3));
+    }
+}

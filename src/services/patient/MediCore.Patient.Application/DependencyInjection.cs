@@ -10,6 +10,7 @@ public static class DependencyInjection
     {
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
         services.AddScoped<IPatientRegistrationService, PatientRegistrationService>();
+        services.AddScoped<IPatientIdentificationService, PatientIdentificationService>();
         services.AddScoped<IPatientProfileService, PatientProfileService>();
         services.AddScoped<IPatientSearchService, PatientSearchService>();
         services.AddScoped<IMedicalRecordService, MedicalRecordService>();
