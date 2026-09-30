@@ -307,7 +307,7 @@ jobs:
           echo "DB init step completed (errors above are safe if schemas already exist)"
 
       - name: Deploy container to Azure App Service
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ secrets.AZURE_PATIENT_NAME }}
           publish-profile: ${{ secrets.AZURE_PATIENT_PUBLISH_PROFILE }}
