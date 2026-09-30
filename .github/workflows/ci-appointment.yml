@@ -319,18 +319,29 @@ jobs:
           APP_URL="https://${{ secrets.AZURE_APPOINTMENT_NAME }}.azurewebsites.net"
           echo "Waiting for $APP_URL to become healthy..."
 
-          for i in {1..12}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health/live" || echo "000")
-            echo "Attempt $i: HTTP $STATUS"
+          # Give Azure time to pull the image and cold-start the container
+          # before we begin polling. The webapps-deploy action returns as soon
+          # as Azure *accepts* the image, not when it is actually serving traffic.
+          echo "Sleeping 90s for container cold-start..."
+          sleep 90
+
+          MAX_ATTEMPTS=24   # 24 × 10 s = 4 minutes
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            # Capture http_code separately to avoid the double-000 bug:
+            # curl writes %{http_code} to stdout AND exits non-zero on
+            # connection failure, so `|| echo 000` would concatenate both.
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health/live" 2>/dev/null)
+            STATUS=${STATUS:-000}   # default to 000 if curl returned nothing
+            echo "Attempt $i/$MAX_ATTEMPTS: HTTP $STATUS"
             if [ "$STATUS" = "200" ]; then
               echo "✅ Deployment healthy!"
               break
             fi
-            if [ $i -eq 12 ]; then
-              echo "::error::Deployment health check failed after 60 seconds"
+            if [ "$i" -eq "$MAX_ATTEMPTS" ]; then
+              echo "::error::Deployment health check failed after $((MAX_ATTEMPTS * 10 + 90)) seconds"
               exit 1
             fi
-            sleep 5
+            sleep 10
           done
 
       - name: Deployment summary
