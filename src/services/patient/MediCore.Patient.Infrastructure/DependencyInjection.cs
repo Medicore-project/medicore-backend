@@ -53,6 +53,8 @@ public static class DependencyInjection
         var appointmentConsumerOptions = new AppointmentConsumerOptions
         {
             BootstrapServers = kafkaBootstrapServers,
+            SaslUsername = configuration["Kafka:SaslUsername"],
+            SaslPassword = configuration["Kafka:SaslPassword"],
             Topic = configuration["Kafka:AppointmentConsumer:Topic"]
                 ?? AppointmentConsumerOptions.DefaultTopic,
             GroupId = configuration["Kafka:AppointmentConsumer:GroupId"]
@@ -60,13 +62,25 @@ public static class DependencyInjection
             RetryDelay = TimeSpan.FromSeconds(retryDelaySeconds)
         };
 
+        var producerConfig = new ProducerConfig
+        {
+            BootstrapServers = kafkaBootstrapServers,
+            EnableIdempotence = true,
+            Acks = Acks.All
+        };
+
+        var saslUsername = configuration["Kafka:SaslUsername"];
+        var saslPassword = configuration["Kafka:SaslPassword"];
+        if (!string.IsNullOrEmpty(saslUsername) && !string.IsNullOrEmpty(saslPassword))
+        {
+            producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
+            producerConfig.SaslMechanism = SaslMechanism.Plain;
+            producerConfig.SaslUsername = saslUsername;
+            producerConfig.SaslPassword = saslPassword;
+        }
+
         services.AddSingleton<IProducer<string, string>>(_ =>
-            new ProducerBuilder<string, string>(new ProducerConfig
-            {
-                BootstrapServers = kafkaBootstrapServers,
-                EnableIdempotence = true,
-                Acks = Acks.All
-            }).Build());
+            new ProducerBuilder<string, string>(producerConfig).Build());
 
         services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
         services.AddSingleton(appointmentConsumerOptions);

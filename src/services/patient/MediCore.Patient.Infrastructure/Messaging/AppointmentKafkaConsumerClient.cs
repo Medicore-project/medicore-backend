@@ -29,14 +29,27 @@ public sealed class AppointmentKafkaConsumerFactory : IAppointmentKafkaConsumerF
         new AppointmentKafkaConsumerClient(
             new ConsumerBuilder<string, string>(BuildConfig(_options)).Build());
 
-    public static ConsumerConfig BuildConfig(AppointmentConsumerOptions options) => new()
+    public static ConsumerConfig BuildConfig(AppointmentConsumerOptions options)
     {
-        BootstrapServers = options.BootstrapServers,
-        GroupId = options.GroupId,
-        AutoOffsetReset = AutoOffsetReset.Earliest,
-        EnableAutoCommit = false,
-        EnableAutoOffsetStore = false
-    };
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = options.BootstrapServers,
+            GroupId = options.GroupId,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = false,
+            EnableAutoOffsetStore = false
+        };
+
+        if (!string.IsNullOrEmpty(options.SaslUsername) && !string.IsNullOrEmpty(options.SaslPassword))
+        {
+            config.SecurityProtocol = SecurityProtocol.SaslSsl;
+            config.SaslMechanism = SaslMechanism.Plain;
+            config.SaslUsername = options.SaslUsername;
+            config.SaslPassword = options.SaslPassword;
+        }
+
+        return config;
+    }
 
     private sealed class AppointmentKafkaConsumerClient : IAppointmentKafkaConsumerClient
     {

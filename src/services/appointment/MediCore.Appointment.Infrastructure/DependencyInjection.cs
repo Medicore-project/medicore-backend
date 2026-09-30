@@ -75,6 +75,8 @@ public static class DependencyInjection
         services.AddSingleton(new StaffConsumerOptions
         {
             BootstrapServers = bootstrapServers,
+            SaslUsername = configuration["Kafka:SaslUsername"],
+            SaslPassword = configuration["Kafka:SaslPassword"],
             Topic = configuration["Kafka:StaffConsumer:Topic"] ?? StaffConsumerOptions.DefaultTopic,
             GroupId = configuration["Kafka:StaffConsumer:GroupId"] ?? StaffConsumerOptions.DefaultGroupId,
             RetryDelay = TimeSpan.FromSeconds(retryDelaySeconds)
@@ -99,13 +101,25 @@ public static class DependencyInjection
             return;
         }
 
+        var producerConfig = new ProducerConfig
+        {
+            BootstrapServers = bootstrapServers,
+            EnableIdempotence = true,
+            Acks = Acks.All
+        };
+
+        var saslUsername = configuration["Kafka:SaslUsername"];
+        var saslPassword = configuration["Kafka:SaslPassword"];
+        if (!string.IsNullOrEmpty(saslUsername) && !string.IsNullOrEmpty(saslPassword))
+        {
+            producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
+            producerConfig.SaslMechanism = SaslMechanism.Plain;
+            producerConfig.SaslUsername = saslUsername;
+            producerConfig.SaslPassword = saslPassword;
+        }
+
         services.AddSingleton<IProducer<string, string>>(_ =>
-            new ProducerBuilder<string, string>(new ProducerConfig
-            {
-                BootstrapServers = bootstrapServers,
-                EnableIdempotence = true,
-                Acks = Acks.All
-            }).Build());
+            new ProducerBuilder<string, string>(producerConfig).Build());
         services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
         services.AddHostedService<OutboxProcessor>();
     }
