@@ -217,7 +217,7 @@ jobs:
 
     steps:
       - name: Deploy container to Azure App Service
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ secrets.AZURE_GATEWAY_NAME }}
           publish-profile: ${{ secrets.AZURE_GATEWAY_PUBLISH_PROFILE }}
