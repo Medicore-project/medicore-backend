@@ -307,12 +307,20 @@ jobs:
           psql "$CONN" -f infra/postgres/init/01-init-db.sql
           echo "DB init step completed (errors above are safe if schemas already exist)"
 
+      # azure/webapps-deploy@v3 introduced a regression: it tries to detect the
+      # app's runtime OS via the SCM API using publish-profile auth, which returns
+      # an unexpected response for Linux container apps → "Failed to get app runtime OS".
+      # webapps-deploy@v2 does NOT have this probe — it uses the publish profile
+      # directly to POST the image update and works correctly for Linux containers.
       - name: Deploy container to Azure App Service
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ secrets.AZURE_APPOINTMENT_NAME }}
           publish-profile: ${{ secrets.AZURE_APPOINTMENT_PUBLISH_PROFILE }}
           images: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+
+
+
 
       - name: Wait for deployment and health check
         run: |
