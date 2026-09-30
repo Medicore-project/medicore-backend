@@ -43,13 +43,25 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Kafka setting 'Kafka:BootstrapServers' is missing.");
 
+        var producerConfig = new ProducerConfig
+        {
+            BootstrapServers = kafkaBootstrapServers,
+            EnableIdempotence = true,
+            Acks = Acks.All
+        };
+
+        var saslUsername = configuration["Kafka:SaslUsername"];
+        var saslPassword = configuration["Kafka:SaslPassword"];
+        if (!string.IsNullOrEmpty(saslUsername) && !string.IsNullOrEmpty(saslPassword))
+        {
+            producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
+            producerConfig.SaslMechanism = SaslMechanism.Plain;
+            producerConfig.SaslUsername = saslUsername;
+            producerConfig.SaslPassword = saslPassword;
+        }
+
         services.AddSingleton<IProducer<string, string>>(_ =>
-            new ProducerBuilder<string, string>(new ProducerConfig
-            {
-                BootstrapServers = kafkaBootstrapServers,
-                EnableIdempotence = true,
-                Acks = Acks.All
-            }).Build());
+            new ProducerBuilder<string, string>(producerConfig).Build());
 
         services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
         services.AddHostedService<OutboxProcessor>();

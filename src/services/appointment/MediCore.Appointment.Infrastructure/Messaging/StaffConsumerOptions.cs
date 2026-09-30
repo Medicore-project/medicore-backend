@@ -6,6 +6,8 @@ public sealed class StaffConsumerOptions
     public const string DefaultGroupId = "medicore-appointment";
 
     public required string BootstrapServers { get; init; }
+    public string? SaslUsername { get; init; }
+    public string? SaslPassword { get; init; }
     public string Topic { get; init; } = DefaultTopic;
     public string GroupId { get; init; } = DefaultGroupId;
     public TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(2);

@@ -30,18 +30,31 @@ public sealed class StaffKafkaConsumerFactory : IStaffKafkaConsumerFactory
         new StaffKafkaConsumerClient(
             new ConsumerBuilder<string, string>(BuildConfig(_options)).Build());
 
-    public static ConsumerConfig BuildConfig(StaffConsumerOptions options) => new()
+    public static ConsumerConfig BuildConfig(StaffConsumerOptions options)
     {
-        BootstrapServers = options.BootstrapServers,
-        GroupId = options.GroupId,
+        var config = new ConsumerConfig
+        {
+            BootstrapServers = options.BootstrapServers,
+            GroupId = options.GroupId,
 
-        // A new group starts from the oldest retained event, not only ones published after it joined.
-        AutoOffsetReset = AutoOffsetReset.Earliest,
+            // A new group starts from the oldest retained event, not only ones published after it joined.
+            AutoOffsetReset = AutoOffsetReset.Earliest,
 
-        // Offsets are committed by hand, only once the cache and the processed-message row are saved.
-        EnableAutoCommit = false,
-        EnableAutoOffsetStore = false
-    };
+            // Offsets are committed by hand, only once the cache and the processed-message row are saved.
+            EnableAutoCommit = false,
+            EnableAutoOffsetStore = false
+        };
+
+        if (!string.IsNullOrEmpty(options.SaslUsername) && !string.IsNullOrEmpty(options.SaslPassword))
+        {
+            config.SecurityProtocol = SecurityProtocol.SaslSsl;
+            config.SaslMechanism = SaslMechanism.Plain;
+            config.SaslUsername = options.SaslUsername;
+            config.SaslPassword = options.SaslPassword;
+        }
+
+        return config;
+    }
 
     private sealed class StaffKafkaConsumerClient : IStaffKafkaConsumerClient
     {
