@@ -15,7 +15,7 @@ FROM build AS publish
 RUN dotnet publish "Gateway.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Runtime stage — minimal image, non-root user
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 USER root
