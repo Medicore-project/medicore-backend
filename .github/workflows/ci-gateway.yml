@@ -23,6 +23,7 @@ on:
     paths:
       - "src/gateway/**"
       - ".github/workflows/ci-gateway.yml"
+  workflow_dispatch:
 
 env:
   DOTNET_VERSION: "8.0.x"

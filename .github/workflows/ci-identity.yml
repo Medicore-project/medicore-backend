@@ -26,6 +26,7 @@ on:
       - "src/services/identity/**"
       - "src/shared/**"
       - ".github/workflows/ci-identity.yml"
+  workflow_dispatch:
 
 env:
   DOTNET_VERSION: "8.0.x"

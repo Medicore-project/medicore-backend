@@ -26,6 +26,7 @@ on:
       - "src/services/patient/**"
       - "src/shared/**"
       - ".github/workflows/ci-patient.yml"
+  workflow_dispatch:
 
 env:
   DOTNET_VERSION: "8.0.x"

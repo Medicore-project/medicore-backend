@@ -26,6 +26,7 @@ on:
       - "src/services/appointment/**"
       - "src/shared/**"
       - ".github/workflows/ci-appointment.yml"
+  workflow_dispatch:
 
 env:
   DOTNET_VERSION: "8.0.x"
