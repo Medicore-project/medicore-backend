@@ -1,0 +1,24 @@
+using MediCore.Billing.Application.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace MediCore.Billing.Infrastructure.Persistence;
+
+public sealed class BillingDbContext : DbContext
+{
+    public BillingDbContext(DbContextOptions<BillingDbContext> options)
+        : base(options)
+    {
+    }
+
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+    public DbSet<ServiceTariff> ServiceTariffs => Set<ServiceTariff>();
+    public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("medicore_billing");
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BillingDbContext).Assembly);
+        base.OnModelCreating(modelBuilder);
+    }
+}

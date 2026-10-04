@@ -5,6 +5,19 @@
     <Project Path="src/gateway/MediCore.Gateway/Gateway.csproj" />
   </Folder>
   <Folder Name="/src/services/" />
+  <Folder Name="/src/services/billing/" />
+  <Folder Name="/src/services/billing/MediCore.Billing.Api/">
+    <Project Path="src/services/billing/MediCore.Billing.Api/Api.csproj" />
+  </Folder>
+  <Folder Name="/src/services/billing/MediCore.Billing.Application/">
+    <Project Path="src/services/billing/MediCore.Billing.Application/Application.csproj" />
+  </Folder>
+  <Folder Name="/src/services/billing/MediCore.Billing.Infrastructure/">
+    <Project Path="src/services/billing/MediCore.Billing.Infrastructure/Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/services/billing/MediCore.Billing.Tests/">
+    <Project Path="src/services/billing/MediCore.Billing.Tests/Tests.csproj" />
+  </Folder>
   <Folder Name="/src/services/appointment/" />
   <Folder Name="/src/services/appointment/MediCore.Appointment.Api/">
     <Project Path="src/services/appointment/MediCore.Appointment.Api/Api.csproj" />

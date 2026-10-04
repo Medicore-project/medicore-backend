@@ -1,0 +1,69 @@
+name: Billing Service CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/services/billing/**"
+      - "src/shared/MediCore.Contracts/**"
+      - ".github/workflows/ci-billing.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/services/billing/**"
+      - "src/shared/MediCore.Contracts/**"
+      - ".github/workflows/ci-billing.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: "src/services/billing/**/*.csproj"
+
+      - name: Restore
+        run: |
+          dotnet restore src/services/billing/MediCore.Billing.Api/Api.csproj
+          dotnet restore src/services/billing/MediCore.Billing.Tests/Tests.csproj
+
+      - name: Build API
+        run: >-
+          dotnet build src/services/billing/MediCore.Billing.Api/Api.csproj
+          --configuration Release --no-restore
+
+      - name: Test with coverage
+        run: >-
+          dotnet test src/services/billing/MediCore.Billing.Tests/Tests.csproj
+          --configuration Release --no-restore
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage/billing
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: billing-coverage
+          path: coverage/billing/**
+          if-no-files-found: error
+
+  docker-build:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Billing image
+        run: docker build --file src/services/billing/Dockerfile --tag medicore-billing:ci .
