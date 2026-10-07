@@ -141,11 +141,62 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
         invoice.Status = InvoiceStatus.Payable;
         invoice.FinalizedAtUtc = EnsureUtc(completedEvent.OccurredAtUtc);
         invoice.UpdatedAtUtc = nowUtc;
+        invoice.Version++;
         await RecordProcessedAsync(completedEvent, AppointmentBillingResult.Processed, cancellationToken);
 
         var result = await SaveAsync(AppointmentBillingResult.Processed, cancellationToken);
         _logger.LogInformation(
             "Finalized invoice {InvoiceId} for appointment {AppointmentId} as Payable.",
+            invoice.InvoiceId,
+            invoice.AppointmentId);
+        return result;
+    }
+
+    public async Task<AppointmentBillingResult> HandleCancelledAsync(
+        AppointmentCancelledEvent cancelledEvent,
+        CancellationToken cancellationToken = default)
+    {
+        // Duplicate cancellation deliveries must not inspect or mutate the invoice.
+        if (await _processedMessageRepository.ExistsAsync(cancelledEvent.MessageId, cancellationToken))
+        {
+            return AppointmentBillingResult.Duplicate;
+        }
+
+        ValidateCancelled(cancelledEvent);
+        var invoice = await _invoiceRepository.GetTrackedByAppointmentIdAsync(
+            cancelledEvent.AppointmentId, cancellationToken);
+
+        if (invoice is null)
+        {
+            await RecordProcessedAsync(cancelledEvent, AppointmentBillingResult.InvoiceNotFound, cancellationToken);
+            _logger.LogWarning(
+                "Cancellation message {MessageId} has no invoice for appointment {AppointmentId}.",
+                cancelledEvent.MessageId,
+                cancelledEvent.AppointmentId);
+            return await SaveAsync(AppointmentBillingResult.InvoiceNotFound, cancellationToken);
+        }
+
+        if (!string.Equals(invoice.Status, InvoiceStatus.Draft, StringComparison.Ordinal))
+        {
+            await RecordProcessedAsync(cancelledEvent, AppointmentBillingResult.AlreadyFinalized, cancellationToken);
+            _logger.LogWarning(
+                "Invoice {InvoiceId} cannot be voided from status {Status}.",
+                invoice.InvoiceId,
+                invoice.Status);
+            return await SaveAsync(AppointmentBillingResult.AlreadyFinalized, cancellationToken);
+        }
+
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        invoice.Status = InvoiceStatus.Void;
+        invoice.VoidReason = cancelledEvent.Reason.Trim();
+        invoice.VoidedAtUtc = EnsureUtc(cancelledEvent.OccurredAtUtc);
+        invoice.UpdatedAtUtc = nowUtc;
+        invoice.Version++;
+        await RecordProcessedAsync(cancelledEvent, AppointmentBillingResult.Processed, cancellationToken);
+
+        var result = await SaveAsync(AppointmentBillingResult.Processed, cancellationToken);
+        _logger.LogInformation(
+            "Voided invoice {InvoiceId} for cancelled appointment {AppointmentId}.",
             invoice.InvoiceId,
             invoice.AppointmentId);
         return result;
@@ -198,6 +249,15 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
         if (completedEvent.MessageId == Guid.Empty) throw new ArgumentException("MessageId is required.");
         if (completedEvent.AppointmentId == Guid.Empty) throw new ArgumentException("AppointmentId is required.");
         if (completedEvent.Version != 1) throw new ArgumentException("Only event version 1 is supported.");
+    }
+
+    private static void ValidateCancelled(AppointmentCancelledEvent cancelledEvent)
+    {
+        if (cancelledEvent.MessageId == Guid.Empty) throw new ArgumentException("MessageId is required.");
+        if (cancelledEvent.AppointmentId == Guid.Empty) throw new ArgumentException("AppointmentId is required.");
+        if (string.IsNullOrWhiteSpace(cancelledEvent.Reason)) throw new ArgumentException("Reason is required.");
+        if (cancelledEvent.Reason.Trim().Length > 500) throw new ArgumentException("Reason must not exceed 500 characters.");
+        if (cancelledEvent.Version != 1) throw new ArgumentException("Only event version 1 is supported.");
     }
 
     private static string CreateInvoiceNumber(Guid invoiceId, DateTime nowUtc) =>

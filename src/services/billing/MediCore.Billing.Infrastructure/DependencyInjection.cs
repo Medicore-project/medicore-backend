@@ -1,3 +1,4 @@
+using Confluent.Kafka;
 using MediCore.Billing.Application.Interfaces;
 using MediCore.Billing.Infrastructure.Messaging;
 using MediCore.Billing.Infrastructure.Persistence;
@@ -24,6 +25,8 @@ public static class DependencyInjection
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
         services.AddScoped<IServiceTariffRepository, ServiceTariffRepository>();
         services.AddScoped<IProcessedMessageRepository, ProcessedMessageRepository>();
+        services.AddScoped<IPaymentRepository, PaymentRepository>();
+        services.AddScoped<IOutboxMessageRepository, OutboxMessageRepository>();
         services.AddScoped<IUnitOfWork, BillingUnitOfWork>();
 
         var bootstrapServers = configuration["Kafka:BootstrapServers"]
@@ -46,6 +49,25 @@ public static class DependencyInjection
         services.AddSingleton<IAppointmentKafkaConsumerFactory, AppointmentKafkaConsumerFactory>();
         services.AddScoped<IAppointmentEventProcessor, AppointmentEventProcessor>();
         services.AddHostedService<AppointmentEventsConsumer>();
+
+        var producerConfig = new ProducerConfig
+        {
+            BootstrapServers = bootstrapServers,
+            EnableIdempotence = true,
+            Acks = Acks.All
+        };
+        if (!string.IsNullOrEmpty(options.SaslUsername) && !string.IsNullOrEmpty(options.SaslPassword))
+        {
+            producerConfig.SecurityProtocol = SecurityProtocol.SaslSsl;
+            producerConfig.SaslMechanism = SaslMechanism.Plain;
+            producerConfig.SaslUsername = options.SaslUsername;
+            producerConfig.SaslPassword = options.SaslPassword;
+        }
+
+        services.AddSingleton<IProducer<string, string>>(_ =>
+            new ProducerBuilder<string, string>(producerConfig).Build());
+        services.AddSingleton<IKafkaEventPublisher, KafkaEventPublisher>();
+        services.AddHostedService<OutboxProcessor>();
         return services;
     }
 }

@@ -29,6 +29,10 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("AmountPaid")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<Guid>("AppointmentId")
                         .HasColumnType("uuid");
 
@@ -49,6 +53,9 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)");
 
                     b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PaidAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("PatientId")
@@ -82,6 +89,17 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VoidReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("VoidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("InvoiceId");
 
                     b.HasIndex("AppointmentId")
@@ -95,7 +113,10 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.HasIndex("PatientId", "IssuedAtUtc")
                         .HasDatabaseName("ix_invoices_patient_issued_at");
 
-                    b.ToTable("invoices", "medicore_billing");
+                    b.ToTable("invoices", "medicore_billing", t =>
+                        {
+                            t.HasCheckConstraint("ck_invoices_amount_paid", "\"AmountPaid\" >= 0 AND \"AmountPaid\" <= \"Total\"");
+                        });
                 });
 
             modelBuilder.Entity("MediCore.Billing.Application.Entities.InvoiceLine", b =>
@@ -136,6 +157,102 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.HasIndex("InvoiceId");
 
                     b.ToTable("invoice_lines", "medicore_billing");
+                });
+
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("EventKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("EventVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("OccurredOnUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("ProcessedOnUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Topic")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId")
+                        .IsUnique();
+
+                    b.HasIndex("ProcessedOnUtc", "OccurredOnUtc");
+
+                    b.ToTable("outbox_messages", "medicore_billing");
+                });
+
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.Payment", b =>
+                {
+                    b.Property<Guid>("PaymentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("PaymentId");
+
+                    b.HasIndex("InvoiceId", "RecordedAtUtc")
+                        .HasDatabaseName("ix_payments_invoice_recorded_at");
+
+                    b.ToTable("payments", "medicore_billing", t =>
+                        {
+                            t.HasCheckConstraint("ck_payments_amount_positive", "\"Amount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("MediCore.Billing.Application.Entities.ProcessedMessage", b =>
@@ -216,7 +333,12 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_service_tariffs_code_effective_from");
 
-                    b.ToTable("service_tariffs", "medicore_billing");
+                    b.ToTable("service_tariffs", "medicore_billing", t =>
+                        {
+                            t.HasCheckConstraint("ck_service_tariffs_effective_dates", "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
+
+                            t.HasCheckConstraint("ck_service_tariffs_unit_price", "\"UnitPrice\" > 0");
+                        });
 
                     b.HasData(
                         new
@@ -262,9 +384,22 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.Navigation("Invoice");
                 });
 
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.Payment", b =>
+                {
+                    b.HasOne("MediCore.Billing.Application.Entities.Invoice", "Invoice")
+                        .WithMany("Payments")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Invoice");
+                });
+
             modelBuilder.Entity("MediCore.Billing.Application.Entities.Invoice", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("Payments");
                 });
 #pragma warning restore 612, 618
         }

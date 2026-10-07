@@ -38,6 +38,18 @@ public static class ServiceCodes
     ];
 
     /// <summary>
+    /// Resolves the billable service for a doctor-owned booking. General and specialist
+    /// consultations are derived from the trusted doctor cache rather than from the caller.
+    /// Follow-ups remain explicit until their dedicated eligibility workflow is introduced.
+    /// </summary>
+    public static string ResolveForDoctor(string? specialization, string? requestedCode = null) =>
+        string.Equals(requestedCode, FollowUp, StringComparison.Ordinal)
+            ? FollowUp
+            : string.IsNullOrWhiteSpace(specialization)
+                ? GeneralConsultation
+                : SpecialistConsultation;
+
+    /// <summary>
     /// Whether <paramref name="code"/> is one this service recognises. Case-sensitive on purpose:
     /// the code is stored verbatim and published verbatim, so accepting "gen-consult" would put two
     /// spellings of one service on the topic.
