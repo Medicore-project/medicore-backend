@@ -12,7 +12,13 @@ public sealed class ServiceTariffConfiguration : IEntityTypeConfiguration<Servic
 
     public void Configure(EntityTypeBuilder<ServiceTariff> builder)
     {
-        builder.ToTable("service_tariffs");
+        builder.ToTable("service_tariffs", table =>
+        {
+            table.HasCheckConstraint("ck_service_tariffs_unit_price", "\"UnitPrice\" > 0");
+            table.HasCheckConstraint(
+                "ck_service_tariffs_effective_dates",
+                "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
+        });
         builder.HasKey(tariff => tariff.TariffId);
         builder.Property(tariff => tariff.ServiceCode).HasMaxLength(50).IsRequired();
         builder.Property(tariff => tariff.Description).HasMaxLength(300).IsRequired();

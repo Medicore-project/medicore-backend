@@ -20,6 +20,11 @@ public sealed class BillingUnitOfWork : IUnitOfWork
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            _dbContext.ChangeTracker.Clear();
+            throw new ConcurrentPaymentException(exception);
+        }
         catch (DbUpdateException exception) when (
             exception.InnerException is PostgresException
             {

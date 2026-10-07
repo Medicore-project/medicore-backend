@@ -20,13 +20,17 @@ public sealed class InvoiceRepository : IInvoiceRepository
             invoice => invoice.AppointmentId == appointmentId, cancellationToken);
 
     public Task<Invoice?> GetByIdAsync(Guid invoiceId, CancellationToken cancellationToken = default) =>
-        _dbContext.Invoices.AsNoTracking().Include(invoice => invoice.Lines)
+        _dbContext.Invoices.AsNoTracking()
+            .Include(invoice => invoice.Lines)
+            .Include(invoice => invoice.Payments)
             .SingleOrDefaultAsync(invoice => invoice.InvoiceId == invoiceId, cancellationToken);
 
     public Task<Invoice?> GetByAppointmentIdAsync(
         Guid appointmentId,
         CancellationToken cancellationToken = default) =>
-        _dbContext.Invoices.AsNoTracking().Include(invoice => invoice.Lines)
+        _dbContext.Invoices.AsNoTracking()
+            .Include(invoice => invoice.Lines)
+            .Include(invoice => invoice.Payments)
             .SingleOrDefaultAsync(invoice => invoice.AppointmentId == appointmentId, cancellationToken);
 
     public Task AddAsync(Invoice invoice, CancellationToken cancellationToken = default) =>

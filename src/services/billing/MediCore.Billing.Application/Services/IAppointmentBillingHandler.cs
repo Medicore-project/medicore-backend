@@ -11,6 +11,10 @@ public interface IAppointmentBillingHandler
     Task<AppointmentBillingResult> HandleCompletedAsync(
         AppointmentCompletedEvent completedEvent,
         CancellationToken cancellationToken = default);
+
+    Task<AppointmentBillingResult> HandleCancelledAsync(
+        AppointmentCancelledEvent cancelledEvent,
+        CancellationToken cancellationToken = default);
 }
 
 public enum AppointmentBillingResult

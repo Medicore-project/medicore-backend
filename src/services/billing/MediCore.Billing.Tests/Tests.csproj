@@ -17,7 +17,9 @@
     <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\MediCore.Billing.Api\Api.csproj" />
     <ProjectReference Include="..\MediCore.Billing.Application\Application.csproj" />
+    <ProjectReference Include="..\MediCore.Billing.Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

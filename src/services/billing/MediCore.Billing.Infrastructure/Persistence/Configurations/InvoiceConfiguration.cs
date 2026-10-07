@@ -16,7 +16,14 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(invoice => invoice.Currency).HasMaxLength(3).IsRequired();
         builder.Property(invoice => invoice.Subtotal).HasPrecision(18, 2).IsRequired();
         builder.Property(invoice => invoice.Total).HasPrecision(18, 2).IsRequired();
+        builder.Property(invoice => invoice.AmountPaid).HasPrecision(18, 2).IsRequired();
         builder.Property(invoice => invoice.PricingIssue).HasMaxLength(500);
+        builder.Property(invoice => invoice.VoidReason).HasMaxLength(500);
+        builder.Property(invoice => invoice.Version).IsConcurrencyToken();
+
+        builder.ToTable(table => table.HasCheckConstraint(
+            "ck_invoices_amount_paid",
+            "\"AmountPaid\" >= 0 AND \"AmountPaid\" <= \"Total\""));
 
         builder.HasIndex(invoice => invoice.InvoiceNumber)
             .IsUnique()

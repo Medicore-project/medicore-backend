@@ -9,6 +9,15 @@ public sealed record InvoiceLineResponse(
     decimal? UnitPrice,
     decimal LineTotal);
 
+public sealed record PaymentResponse(
+    Guid PaymentId,
+    decimal Amount,
+    string Method,
+    DateTime RecordedAtUtc,
+    string RecordedBy);
+
+public sealed record RecordPaymentRequest(decimal Amount, string Method);
+
 public sealed record InvoiceResponse(
     Guid InvoiceId,
     string InvoiceNumber,
@@ -19,8 +28,14 @@ public sealed record InvoiceResponse(
     string Currency,
     decimal Subtotal,
     decimal Total,
+    decimal AmountPaid,
+    decimal BalanceDue,
     bool RequiresManualPricing,
     string? PricingIssue,
     DateTime IssuedAtUtc,
     DateTime? FinalizedAtUtc,
-    IReadOnlyList<InvoiceLineResponse> Lines);
+    DateTime? VoidedAtUtc,
+    string? VoidReason,
+    DateTime? PaidAtUtc,
+    IReadOnlyList<InvoiceLineResponse> Lines,
+    IReadOnlyList<PaymentResponse> Payments);

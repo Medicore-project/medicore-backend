@@ -42,6 +42,8 @@ public sealed class AppointmentEventProcessor : IAppointmentEventProcessor
         {
             "appointment.booked" => await _handler.HandleBookedAsync(
                 Deserialize<AppointmentBookedEvent>(payload), cancellationToken),
+            "appointment.cancelled" => await _handler.HandleCancelledAsync(
+                Deserialize<AppointmentCancelledEvent>(payload), cancellationToken),
             "appointment.completed" => await _handler.HandleCompletedAsync(
                 Deserialize<AppointmentCompletedEvent>(payload), cancellationToken),
             _ => null

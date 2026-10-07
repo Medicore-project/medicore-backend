@@ -3,6 +3,7 @@ using System;
 using MediCore.Billing.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MediCore.Billing.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(BillingDbContext))]
-    partial class BillingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006165626_AddPaymentsAndBillingOutbox")]
+    partial class AddPaymentsAndBillingOutbox
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -333,12 +336,7 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_service_tariffs_code_effective_from");
 
-                    b.ToTable("service_tariffs", "medicore_billing", t =>
-                        {
-                            t.HasCheckConstraint("ck_service_tariffs_effective_dates", "\"EffectiveToUtc\" IS NULL OR \"EffectiveToUtc\" > \"EffectiveFromUtc\"");
-
-                            t.HasCheckConstraint("ck_service_tariffs_unit_price", "\"UnitPrice\" > 0");
-                        });
+                    b.ToTable("service_tariffs", "medicore_billing");
 
                     b.HasData(
                         new

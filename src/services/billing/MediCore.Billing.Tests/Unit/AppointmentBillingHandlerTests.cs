@@ -97,6 +97,7 @@ public sealed class AppointmentBillingHandlerTests
         Assert.Equal(AppointmentBillingResult.Processed, result);
         Assert.Equal(InvoiceStatus.Payable, fixture.Invoices.Stored.Status);
         Assert.Equal(NowUtc.AddMinutes(-1), fixture.Invoices.Stored.FinalizedAtUtc);
+        Assert.Equal(1, fixture.Invoices.Stored.Version);
         Assert.Equal("Processed", Assert.Single(fixture.Processed.Added).Outcome);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
     }
@@ -126,6 +127,83 @@ public sealed class AppointmentBillingHandlerTests
         Assert.Equal(0, fixture.UnitOfWork.SaveCount);
     }
 
+    [Fact]
+    public async Task Cancelled_voids_draft_invoice_and_records_reason()
+    {
+        var fixture = new Fixture();
+        fixture.Invoices.Stored = Invoice();
+
+        var result = await fixture.Handler.HandleCancelledAsync(Cancelled("  Patient request  "));
+
+        Assert.Equal(AppointmentBillingResult.Processed, result);
+        Assert.Equal(InvoiceStatus.Void, fixture.Invoices.Stored.Status);
+        Assert.Equal("Patient request", fixture.Invoices.Stored.VoidReason);
+        Assert.Equal(NowUtc.AddMinutes(-2), fixture.Invoices.Stored.VoidedAtUtc);
+        Assert.Equal(NowUtc, fixture.Invoices.Stored.UpdatedAtUtc);
+        Assert.Equal(1, fixture.Invoices.Stored.Version);
+        Assert.Equal("Processed", Assert.Single(fixture.Processed.Added).Outcome);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Cancelled_duplicate_is_checked_before_invoice_access()
+    {
+        var fixture = new Fixture();
+        fixture.Processed.Exists = true;
+
+        var result = await fixture.Handler.HandleCancelledAsync(Cancelled());
+
+        Assert.Equal(AppointmentBillingResult.Duplicate, result);
+        Assert.Equal(1, fixture.Processed.ExistsCalls);
+        Assert.Equal(0, fixture.Invoices.AppointmentLookupCalls);
+        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Cancelled_without_invoice_is_recorded_and_does_not_poison_partition()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Handler.HandleCancelledAsync(Cancelled());
+
+        Assert.Equal(AppointmentBillingResult.InvoiceNotFound, result);
+        Assert.Equal("InvoiceNotFound", Assert.Single(fixture.Processed.Added).Outcome);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Theory]
+    [InlineData(InvoiceStatus.Payable)]
+    [InlineData(InvoiceStatus.Paid)]
+    [InlineData(InvoiceStatus.Void)]
+    public async Task Cancelled_does_not_void_an_invoice_that_is_not_draft(string status)
+    {
+        var fixture = new Fixture();
+        fixture.Invoices.Stored = Invoice();
+        fixture.Invoices.Stored.Status = status;
+
+        var result = await fixture.Handler.HandleCancelledAsync(Cancelled());
+
+        Assert.Equal(AppointmentBillingResult.AlreadyFinalized, result);
+        Assert.Equal(status, fixture.Invoices.Stored.Status);
+        Assert.Null(fixture.Invoices.Stored.VoidReason);
+        Assert.Null(fixture.Invoices.Stored.VoidedAtUtc);
+        Assert.Equal("AlreadyFinalized", Assert.Single(fixture.Processed.Added).Outcome);
+        Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Cancelled_rejects_a_reason_longer_than_the_persisted_limit()
+    {
+        var fixture = new Fixture();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            fixture.Handler.HandleCancelledAsync(Cancelled(new string('x', 501))));
+
+        Assert.Contains("500", exception.Message);
+        Assert.Equal(0, fixture.Invoices.AppointmentLookupCalls);
+        Assert.Equal(0, fixture.UnitOfWork.SaveCount);
+    }
+
     private static AppointmentBookedEvent Booked(string serviceCode = "GEN-CONSULT") => new()
     {
         MessageId = Guid.NewGuid(),
@@ -146,6 +224,15 @@ public sealed class AppointmentBillingHandlerTests
         Notes = "Consultation completed.",
         OccurredAtUtc = NowUtc.AddMinutes(-1),
         CorrelationId = "corr-42"
+    };
+
+    private static AppointmentCancelledEvent Cancelled(string reason = "Patient request") => new()
+    {
+        MessageId = Guid.NewGuid(),
+        AppointmentId = AppointmentId,
+        Reason = reason,
+        OccurredAtUtc = NowUtc.AddMinutes(-2),
+        CorrelationId = "corr-43"
     };
 
     private static readonly Guid AppointmentId = Guid.Parse("de39865f-795c-4b52-823d-7df4e8c4f842");
@@ -216,6 +303,27 @@ public sealed class AppointmentBillingHandlerTests
         public ServiceTariff? Result { get; set; }
         public int LookupCalls { get; private set; }
 
+        public Task<IReadOnlyList<ServiceTariff>> GetAllAsync(
+            bool includeInactive,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ServiceTariff>>([]);
+
+        public Task<ServiceTariff?> GetByIdAsync(
+            Guid tariffId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result?.TariffId == tariffId ? Result : null);
+
+        public Task<bool> CodeExistsAsync(
+            string serviceCode,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result?.ServiceCode == serviceCode);
+
+        public Task<IReadOnlyList<ServiceTariff>> GetVersionsAsync(
+            string serviceCode,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ServiceTariff>>(
+                Result?.ServiceCode == serviceCode ? [Result] : []);
+
         public Task<ServiceTariff?> FindEffectiveAsync(
             string serviceCode,
             DateTime effectiveAtUtc,
@@ -224,6 +332,10 @@ public sealed class AppointmentBillingHandlerTests
             LookupCalls++;
             return Task.FromResult(Result);
         }
+
+        public Task AddAsync(
+            ServiceTariff tariff,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class FakeProcessedMessageRepository : IProcessedMessageRepository
