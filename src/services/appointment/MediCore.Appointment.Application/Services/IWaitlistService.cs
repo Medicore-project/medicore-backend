@@ -16,7 +16,10 @@ public interface IWaitlistService
     /// The patient's number and name from their booking token, kept on the entry so an offer
     /// accepted by the front desk still records who it is for. Null for a staff caller.
     /// </param>
-    /// <param name="serviceCode">What the appointment will be billed as; null for a consultation.</param>
+    /// <param name="serviceCode">
+    /// A workflow hint. General versus specialist consultation is resolved from the trusted doctor
+    /// cache; only an explicit follow-up is preserved.
+    /// </param>
     Task<WaitlistJoinResult> JoinAsync(
         Guid doctorId,
         DateOnly date,

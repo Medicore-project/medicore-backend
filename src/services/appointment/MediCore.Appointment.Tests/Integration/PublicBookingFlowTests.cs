@@ -81,7 +81,7 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         Assert.Equal(_doctorId, appointment.DoctorId);
         Assert.Equal(chosen.SlotId, appointment.SlotId);
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);
-        Assert.Equal(ServiceCodes.GeneralConsultation, appointment.ServiceCode);
+        Assert.Equal(ServiceCodes.SpecialistConsultation, appointment.ServiceCode);
 
         // ── AC1: the slot is taken and no longer offered ──────────────────────
         var remaining = await anonymous.GetFromJsonAsync<List<PublicSlotResponse>>(
@@ -99,7 +99,7 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         Assert.Equal("appointment-events", row.Topic);
         Assert.Equal("appointment.booked", row.EventType);
         Assert.Null(row.ProcessedOnUtc);
-        Assert.Contains(ServiceCodes.GeneralConsultation, row.Payload);
+        Assert.Contains(ServiceCodes.SpecialistConsultation, row.Payload);
     }
 
     [Fact]
