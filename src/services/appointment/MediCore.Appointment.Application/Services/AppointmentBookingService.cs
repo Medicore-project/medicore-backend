@@ -174,7 +174,8 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             _appointmentRepository,
             _outboxRepository,
             _historyRepository,
-            cancellationToken);
+            cancellationToken,
+            doctor.DepartmentId);
 
         // One save for the slot mutation, the appointment, the event row and the history entry,
         // inside the caller's transaction, so AC1 and AC4 of SCRUM-34 commit together or not at

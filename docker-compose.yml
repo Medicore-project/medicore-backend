@@ -393,6 +393,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      mailhog:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
@@ -406,6 +408,18 @@ services:
       Kafka__AppointmentConsumer__Topic: appointment-events
       Kafka__AppointmentConsumer__GroupId: medicore-billing
       Kafka__AppointmentConsumer__RetryDelaySeconds: "2"
+      Kafka__NotificationConsumer__GroupId: medicore-billing-notifications
+      Kafka__NotificationConsumer__Topics__0: patient-events
+      Kafka__NotificationConsumer__Topics__1: appointment-events
+      Kafka__NotificationConsumer__Topics__2: billing-events
+      Kafka__NotificationConsumer__RetryDelaySeconds: "2"
+      Kafka__NotificationConsumer__MaxDeliveryAttempts: "3"
+      Smtp__Host: mailhog
+      Smtp__Port: "1025"
+      Smtp__EnableSsl: "false"
+      Smtp__SendTimeoutSeconds: "10"
+      Smtp__FromAddress: noreply@medicore.local
+      Smtp__FromName: MediCore
     networks:
       - medicore-net
     healthcheck:

@@ -41,6 +41,16 @@ public sealed class AppointmentBillingHandlerTests
     }
 
     [Fact]
+    public async Task Booked_snapshots_department_for_revenue_reporting()
+    {
+        var fixture = new Fixture();
+        var departmentId = Guid.NewGuid();
+        await fixture.Handler.HandleBookedAsync(Booked() with { DepartmentId = departmentId });
+
+        Assert.Equal(departmentId, Assert.Single(fixture.Invoices.Added).DepartmentId);
+    }
+
+    [Fact]
     public async Task Booked_without_tariff_persists_manual_pricing_invoice_instead_of_failing()
     {
         var fixture = new Fixture();

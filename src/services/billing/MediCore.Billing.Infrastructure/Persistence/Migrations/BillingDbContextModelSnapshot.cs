@@ -39,6 +39,9 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -106,6 +109,9 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_invoices_appointment_id");
 
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("ix_invoices_department_id");
+
                     b.HasIndex("InvoiceNumber")
                         .IsUnique()
                         .HasDatabaseName("ux_invoices_invoice_number");
@@ -157,6 +163,49 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.HasIndex("InvoiceId");
 
                     b.ToTable("invoice_lines", "medicore_billing");
+                });
+
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.NotificationLog", b =>
+                {
+                    b.Property<Guid>("NotificationLogId").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<int>("AttemptCount").HasColumnType("integer");
+                    b.Property<string>("Body").IsRequired().HasMaxLength(10000).HasColumnType("character varying(10000)");
+                    b.Property<string>("CorrelationId").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<DateTime>("CreatedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<string>("Error").HasMaxLength(2000).HasColumnType("character varying(2000)");
+                    b.Property<string>("EventType").IsRequired().HasMaxLength(100).HasColumnType("character varying(100)");
+                    b.Property<DateTime?>("LastAttemptAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("NotificationTemplateId").HasColumnType("uuid");
+                    b.Property<string>("Recipient").IsRequired().HasMaxLength(320).HasColumnType("character varying(320)");
+                    b.Property<DateTime?>("SentAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("SourceMessageId").HasColumnType("uuid");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("character varying(20)");
+                    b.Property<string>("Subject").IsRequired().HasMaxLength(300).HasColumnType("character varying(300)");
+                    b.Property<string>("TemplateCode").IsRequired().HasMaxLength(80).HasColumnType("character varying(80)");
+                    b.HasKey("NotificationLogId");
+                    b.HasIndex("NotificationTemplateId");
+                    b.HasIndex("SourceMessageId", "TemplateCode").IsUnique().HasDatabaseName("ux_notification_logs_source_template");
+                    b.HasIndex("Status", "CreatedAtUtc").HasDatabaseName("ix_notification_logs_status_created");
+                    b.ToTable("notification_logs", "medicore_billing");
+                });
+
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.NotificationTemplate", b =>
+                {
+                    b.Property<Guid>("NotificationTemplateId").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<string>("BodyTemplate").IsRequired().HasMaxLength(10000).HasColumnType("character varying(10000)");
+                    b.Property<string>("Code").IsRequired().HasMaxLength(80).HasColumnType("character varying(80)");
+                    b.Property<DateTime>("CreatedAtUtc").HasColumnType("timestamp with time zone");
+                    b.Property<bool>("IsActive").HasColumnType("boolean");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(150).HasColumnType("character varying(150)");
+                    b.Property<string>("SubjectTemplate").IsRequired().HasMaxLength(300).HasColumnType("character varying(300)");
+                    b.Property<DateTime?>("UpdatedAtUtc").HasColumnType("timestamp with time zone");
+                    b.HasKey("NotificationTemplateId");
+                    b.HasIndex("Code").IsUnique().HasDatabaseName("ux_notification_templates_code");
+                    b.ToTable("notification_templates", "medicore_billing");
+                    b.HasData(
+                        new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee01"), BodyTemplate = "Hello {{patientName}},\n\nYour MediCore patient profile is ready. Your patient reference is {{patientId}}.", Code = "PATIENT_WELCOME", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Patient welcome", SubjectTemplate = "Welcome to MediCore, {{patientName}}" },
+                        new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee02"), BodyTemplate = "Hello {{patientName}},\n\nYour {{serviceCode}} appointment is confirmed for {{slotStart}}. Appointment reference: {{appointmentId}}.", Code = "APPOINTMENT_CONFIRMATION", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Appointment confirmation", SubjectTemplate = "MediCore appointment confirmed" },
+                        new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee03"), BodyTemplate = "Hello {{patientName}},\n\nWe received {{amount}} LKR by {{method}} for invoice {{invoiceId}}. Thank you.", Code = "PAYMENT_RECEIPT", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Payment receipt", SubjectTemplate = "MediCore payment receipt" });
                 });
 
             modelBuilder.Entity("MediCore.Billing.Application.Entities.OutboxMessage", b =>
@@ -249,6 +298,9 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.HasIndex("InvoiceId", "RecordedAtUtc")
                         .HasDatabaseName("ix_payments_invoice_recorded_at");
 
+                    b.HasIndex("RecordedAtUtc")
+                        .HasDatabaseName("ix_payments_recorded_at");
+
                     b.ToTable("payments", "medicore_billing", t =>
                         {
                             t.HasCheckConstraint("ck_payments_amount_positive", "\"Amount\" > 0");
@@ -291,6 +343,16 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_processed_messages_consumer_processed_at");
 
                     b.ToTable("processed_messages", "medicore_billing");
+                });
+
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.PatientContact", b =>
+                {
+                    b.Property<Guid>("PatientId").ValueGeneratedOnAdd().HasColumnType("uuid");
+                    b.Property<string>("Email").IsRequired().HasMaxLength(320).HasColumnType("character varying(320)");
+                    b.Property<string>("FullName").IsRequired().HasMaxLength(200).HasColumnType("character varying(200)");
+                    b.Property<DateTime>("UpdatedAtUtc").HasColumnType("timestamp with time zone");
+                    b.HasKey("PatientId");
+                    b.ToTable("patient_contacts", "medicore_billing");
                 });
 
             modelBuilder.Entity("MediCore.Billing.Application.Entities.ServiceTariff", b =>
@@ -382,6 +444,17 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("MediCore.Billing.Application.Entities.NotificationLog", b =>
+                {
+                    b.HasOne("MediCore.Billing.Application.Entities.NotificationTemplate", "Template")
+                        .WithMany()
+                        .HasForeignKey("NotificationTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("MediCore.Billing.Application.Entities.Payment", b =>

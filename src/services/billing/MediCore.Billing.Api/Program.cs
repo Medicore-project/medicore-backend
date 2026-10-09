@@ -72,7 +72,8 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception exception)
     {
-        logger.LogError(exception, "Failed to apply Billing migrations. The app will still start.");
+        logger.LogCritical(exception, "Failed to apply Billing migrations. Billing will not start with an incomplete schema.");
+        throw;
     }
 }
 
