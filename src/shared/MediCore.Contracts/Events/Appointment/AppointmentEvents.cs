@@ -7,6 +7,7 @@ public sealed record AppointmentBookedEvent : IntegrationEvent
     public required Guid AppointmentId { get; init; }
     public required Guid PatientId { get; init; }
     public required Guid DoctorId { get; init; }
+    public Guid? DepartmentId { get; init; }
     public required DateTime SlotStart { get; init; }
     public required string ServiceCode { get; init; }
 }

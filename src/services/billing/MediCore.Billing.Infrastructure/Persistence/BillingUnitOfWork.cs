@@ -45,5 +45,15 @@ public sealed class BillingUnitOfWork : IUnitOfWork
             _dbContext.ChangeTracker.Clear();
             throw new DuplicateInvoiceForAppointmentException(exception);
         }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "ux_notification_logs_source_template"
+            })
+        {
+            _dbContext.ChangeTracker.Clear();
+            throw new DuplicateNotificationLogException(exception);
+        }
     }
 }

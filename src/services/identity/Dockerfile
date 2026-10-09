@@ -24,14 +24,17 @@ COPY ["src/services/identity/MediCore.Identity.Application/Application.csproj", 
 COPY ["src/services/identity/MediCore.Identity.Infrastructure/Infrastructure.csproj", "src/services/identity/MediCore.Identity.Infrastructure/"]
 COPY ["src/shared/MediCore.Contracts/Contracts.csproj",                       "src/shared/MediCore.Contracts/"]
 
-RUN dotnet restore "src/services/identity/MediCore.Identity.Api/Api.csproj"
+COPY infra/docker/restore-with-retry.sh /usr/local/bin/restore-with-retry.sh
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    sh /usr/local/bin/restore-with-retry.sh "src/services/identity/MediCore.Identity.Api/Api.csproj"
 
 # Copy source and build
 COPY src/services/identity/ src/services/identity/
 COPY src/shared/             src/shared/
 
 WORKDIR "/src/src/services/identity/MediCore.Identity.Api"
-RUN dotnet build "Api.csproj" --configuration Release --no-restore
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet build "Api.csproj" --configuration Release --no-restore
 
 # ── Stage 2: Test ─────────────────────────────────────────────────────────────
 FROM build AS test
@@ -39,12 +42,14 @@ WORKDIR /src
 
 # Copy test project
 COPY ["src/services/identity/MediCore.Identity.Tests/Tests.csproj", "src/services/identity/MediCore.Identity.Tests/"]
-RUN dotnet restore "src/services/identity/MediCore.Identity.Tests/Tests.csproj"
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    sh /usr/local/bin/restore-with-retry.sh "src/services/identity/MediCore.Identity.Tests/Tests.csproj"
 
 COPY src/services/identity/MediCore.Identity.Tests/ src/services/identity/MediCore.Identity.Tests/
 
 # Run tests — this stage fails the build if any test fails
-RUN dotnet test "src/services/identity/MediCore.Identity.Tests/Tests.csproj" \
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet test "src/services/identity/MediCore.Identity.Tests/Tests.csproj" \
     --configuration Release \
     --no-restore \
     --logger "console;verbosity=normal"
@@ -52,7 +57,8 @@ RUN dotnet test "src/services/identity/MediCore.Identity.Tests/Tests.csproj" \
 # ── Stage 3: Publish ──────────────────────────────────────────────────────────
 FROM build AS publish
 WORKDIR "/src/src/services/identity/MediCore.Identity.Api"
-RUN dotnet publish "Api.csproj" \
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet publish "Api.csproj" \
     --configuration Release \
     --no-build \
     --output /app/publish \

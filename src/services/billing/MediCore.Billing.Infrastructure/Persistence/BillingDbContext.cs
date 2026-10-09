@@ -16,6 +16,9 @@ public sealed class BillingDbContext : DbContext
     public DbSet<ServiceTariff> ServiceTariffs => Set<ServiceTariff>();
     public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+    public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
+    public DbSet<PatientContact> PatientContacts => Set<PatientContact>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

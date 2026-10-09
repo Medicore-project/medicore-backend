@@ -33,5 +33,7 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasDatabaseName("ux_invoices_appointment_id");
         builder.HasIndex(invoice => new { invoice.PatientId, invoice.IssuedAtUtc })
             .HasDatabaseName("ix_invoices_patient_issued_at");
+        builder.HasIndex(invoice => invoice.DepartmentId)
+            .HasDatabaseName("ix_invoices_department_id");
     }
 }

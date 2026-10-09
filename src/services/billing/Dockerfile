@@ -6,22 +6,28 @@ COPY ["src/services/billing/MediCore.Billing.Api/Api.csproj", "src/services/bill
 COPY ["src/services/billing/MediCore.Billing.Application/Application.csproj", "src/services/billing/MediCore.Billing.Application/"]
 COPY ["src/services/billing/MediCore.Billing.Infrastructure/Infrastructure.csproj", "src/services/billing/MediCore.Billing.Infrastructure/"]
 COPY ["src/shared/MediCore.Contracts/Contracts.csproj", "src/shared/MediCore.Contracts/"]
-RUN dotnet restore "src/services/billing/MediCore.Billing.Api/Api.csproj"
+COPY infra/docker/restore-with-retry.sh /usr/local/bin/restore-with-retry.sh
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    sh /usr/local/bin/restore-with-retry.sh "src/services/billing/MediCore.Billing.Api/Api.csproj"
 COPY src/services/billing/ src/services/billing/
 COPY src/shared/ src/shared/
 WORKDIR "/src/src/services/billing/MediCore.Billing.Api"
-RUN dotnet build "Api.csproj" --configuration Release --no-restore
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet build "Api.csproj" --configuration Release --no-restore
 
 FROM build AS test
 WORKDIR /src
 COPY ["src/services/billing/MediCore.Billing.Tests/Tests.csproj", "src/services/billing/MediCore.Billing.Tests/"]
-RUN dotnet restore "src/services/billing/MediCore.Billing.Tests/Tests.csproj"
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    sh /usr/local/bin/restore-with-retry.sh "src/services/billing/MediCore.Billing.Tests/Tests.csproj"
 COPY src/services/billing/MediCore.Billing.Tests/ src/services/billing/MediCore.Billing.Tests/
-RUN dotnet test "src/services/billing/MediCore.Billing.Tests/Tests.csproj" --configuration Release --no-restore
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet test "src/services/billing/MediCore.Billing.Tests/Tests.csproj" --configuration Release --no-restore
 
 FROM build AS publish
 WORKDIR "/src/src/services/billing/MediCore.Billing.Api"
-RUN dotnet publish "Api.csproj" --configuration Release --no-build --output /app/publish /p:UseAppHost=false
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet publish "Api.csproj" --configuration Release --no-build --output /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS final
 WORKDIR /app

@@ -6,6 +6,7 @@ public sealed class Invoice
     public string InvoiceNumber { get; set; } = string.Empty;
     public Guid AppointmentId { get; set; }
     public Guid PatientId { get; set; }
+    public Guid? DepartmentId { get; set; }
     public string ServiceCode { get; set; } = string.Empty;
     public string Status { get; set; } = InvoiceStatus.Draft;
     public string Currency { get; set; } = "LKR";

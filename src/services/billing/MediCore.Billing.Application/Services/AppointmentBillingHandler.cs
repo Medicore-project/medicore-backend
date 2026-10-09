@@ -68,6 +68,7 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
             InvoiceNumber = CreateInvoiceNumber(invoiceId, nowUtc),
             AppointmentId = bookedEvent.AppointmentId,
             PatientId = bookedEvent.PatientId,
+            DepartmentId = bookedEvent.DepartmentId,
             ServiceCode = bookedEvent.ServiceCode.Trim(),
             Status = InvoiceStatus.Draft,
             Currency = tariff?.Currency ?? "LKR",

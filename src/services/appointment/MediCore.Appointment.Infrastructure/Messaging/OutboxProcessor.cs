@@ -19,14 +19,9 @@ namespace MediCore.Appointment.Infrastructure.Messaging;
 /// fixed here, so the three stay comparable.
 /// </para>
 /// <para>
-/// The one deliberate difference (SCRUM-36): once a message fails, every later message in the
-/// batch with the <strong>same event key</strong> is held back until the next pass. Every event of
-/// one appointment shares its key, and the key is what keeps them on one partition in order — but
-/// only if they reach the broker in order. Without this, a booking that failed to publish would be
-/// overtaken by its own cancellation in the same batch, and billing would be asked to void an
-/// invoice it has not raised. Messages for other appointments are not held back. The Patient and
-/// Identity processors are left unchanged by this ticket; whether they need the same guard is
-/// recorded as an open item in the SCRUM-36 write-up.
+    /// The repository only selects the first pending event for each appointment. A failed booking
+    /// therefore cannot be overtaken by its completion in a later batch. This in-batch guard also
+    /// holds later messages for the same key if a repository supplies more than one at once.
 /// </para>
 /// </remarks>
 public sealed class OutboxProcessor : BackgroundService
@@ -75,8 +70,8 @@ public sealed class OutboxProcessor : BackgroundService
         var messages = await repository.GetUnprocessedBatchAsync(20, cancellationToken);
 
         // Keys whose earlier message failed in this pass. A later message for the same key waits:
-        // it is neither published nor counted as a retry, and the next pass (which reads oldest
-        // first) meets the failed one ahead of it again.
+        // it is neither published nor counted as a retry. The repository will continue to select
+        // the failed event ahead of later events for that appointment.
         var blockedKeys = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var message in messages)

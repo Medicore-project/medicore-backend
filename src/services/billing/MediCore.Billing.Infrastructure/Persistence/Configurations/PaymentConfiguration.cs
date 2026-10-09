@@ -23,5 +23,7 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasIndex(payment => new { payment.InvoiceId, payment.RecordedAtUtc })
             .HasDatabaseName("ix_payments_invoice_recorded_at");
+        builder.HasIndex(payment => payment.RecordedAtUtc)
+            .HasDatabaseName("ix_payments_recorded_at");
     }
 }

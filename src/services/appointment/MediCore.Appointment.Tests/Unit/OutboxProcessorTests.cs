@@ -122,6 +122,7 @@ public sealed class OutboxProcessorTests
         await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
         fixture.Publisher.FailFor = null;
         await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
 
         Assert.Equal([booked.MessageId, cancelled.MessageId], fixture.Publisher.Published);
         Assert.NotNull(booked.ProcessedOnUtc);
@@ -160,6 +161,8 @@ public sealed class OutboxProcessorTests
         await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
 
         Assert.Equal([booked.MessageId], fixture.Publisher.Published);
+        Assert.Equal(0, cancelled.RetryCount);
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
         Assert.Equal(1, cancelled.RetryCount);
     }
 
@@ -195,6 +198,26 @@ public sealed class OutboxProcessorTests
         await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
 
         Assert.Equal([older.MessageId, newer.MessageId], fixture.Publisher.Published);
+    }
+
+    [Fact]
+    public async Task Repeated_failures_on_other_appointments_do_not_starve_a_completion()
+    {
+        var old = new DateTime(2026, 9, 23, 9, 0, 0, DateTimeKind.Utc);
+        var failures = Enumerable.Range(0, 20)
+            .Select(index => Row(old.AddSeconds(index)))
+            .ToArray();
+        var completed = Row(old.AddMinutes(1), eventType: "appointment.completed");
+        var fixture = new Fixture([.. failures, completed]);
+        fixture.Publisher.Fail = new InvalidOperationException("broker refused the message");
+
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+        fixture.Publisher.Fail = null;
+        fixture.Publisher.FailFor = failures[0].MessageId;
+        await fixture.Processor.ProcessBatchAsync(CancellationToken.None);
+
+        Assert.Contains(completed.MessageId, fixture.Publisher.Published);
+        Assert.NotNull(completed.ProcessedOnUtc);
     }
 
     private static OutboxMessage Row(
@@ -254,7 +277,12 @@ public sealed class OutboxProcessorTests
             [
                 .. Rows
                     .Where(row => row.ProcessedOnUtc is null)
-                    .OrderBy(row => row.OccurredOnUtc)
+                    .Where(row => !Rows.Any(earlier =>
+                        earlier.ProcessedOnUtc is null
+                        && earlier.EventKey == row.EventKey
+                        && earlier.OccurredOnUtc < row.OccurredOnUtc))
+                    .OrderBy(row => row.RetryCount)
+                    .ThenBy(row => row.OccurredOnUtc)
                     .Take(batchSize)
             ]);
 

@@ -13,6 +13,10 @@ public static class DependencyInjection
         services.AddScoped<IInvoiceQueryService, InvoiceQueryService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IServiceTariffService, ServiceTariffService>();
+        services.AddScoped<INotificationTemplateService, NotificationTemplateService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IRevenueReportService, RevenueReportService>();
+        services.AddScoped<IOutstandingReportService, OutstandingReportService>();
         services.AddSingleton(TimeProvider.System);
         return services;
     }
