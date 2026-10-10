@@ -157,7 +157,7 @@
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "sum by (method, endpoint) (max without (instance) (rate(http_requests_received_total{job=\"patient-api\"}[1m])))", "legendFormat": "Patient — {{method}} {{endpoint}}", "refId": "A" }
       ],
-      "title": "Patient & Appointment — Request Rate",
+      "title": "Patient — Request Rate",
       "type": "timeseries"
     },
     {
@@ -222,7 +222,7 @@
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "sum(max without (instance) (rate(http_requests_received_total{job=\"patient-api\",code=~\"5..\"}[1m]))) or vector(0)", "legendFormat": "Patient 5xx", "refId": "A" }
       ],
-      "title": "Patient & Appointment — 5xx Error Rate",
+      "title": "Patient — 5xx Error Rate",
       "type": "timeseries"
     },
     {
@@ -309,12 +309,6 @@
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.50, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))))", "legendFormat": "p50", "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.95, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))))", "legendFormat": "p95", "refId": "B" },
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.99, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))))", "legendFormat": "p99", "refId": "C" }
-      ],
-      "title": "Appointment — Latency Percentiles",
-      "type": "timeseries"
-        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))", "legendFormat": "p50", "refId": "A" },
-        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))", "legendFormat": "p95", "refId": "B" },
-        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))", "legendFormat": "p99", "refId": "C" }
       ],
       "title": "Appointment — Latency Percentiles",
       "type": "timeseries"
