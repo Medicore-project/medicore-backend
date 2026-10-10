@@ -21,7 +21,7 @@ groups:
           description: "Topic {{ $labels.topic }} has depth {{ $value }}. Messages failed processing after maximum retries and were routed to the dead-letter topic."
 
       - alert: KafkaConsumerLagHigh
-        expr: sum by (consumergroup, topic) (max without (instance) (kafka_consumergroup_lag)) > 50
+        expr: sum by (consumergroup, topic) (clamp_min(max without (instance) (kafka_consumergroup_lag), 0)) > 50
         for: 1m
         labels:
           severity: warning

@@ -394,7 +394,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
-          "expr": "sum by (consumergroup, topic) (max without (instance) (kafka_consumergroup_lag))",
+          "expr": "sum by (consumergroup, topic) (clamp_min(max without (instance) (kafka_consumergroup_lag), 0))",
           "legendFormat": "{{consumergroup}} — {{topic}}",
           "refId": "A"
         }
