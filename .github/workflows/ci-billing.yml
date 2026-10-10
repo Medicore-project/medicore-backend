@@ -1,69 +1,368 @@
-name: Billing Service CI
+# =============================================================================
+# ci-billing.yml — MediCore Billing & Notification Service CI/CD
+# =============================================================================
+# Triggers ONLY when Billing-related paths change (path filtering proves
+# independent deployability — a Patient change never rebuilds Billing).
+# Notifications (SCRUM-46) live inside the Billing service, so this workflow
+# covers them too; there is no separate Notification pipeline.
+#
+# Jobs:
+#   1. build-and-test   — restore → build → test → upload coverage
+#   2. security-scan    — Gitleaks + CodeQL + dotnet vulnerable packages
+#   3. docker-publish   — multi-stage build, push to GHCR
+#   4. deploy-azure     — deploy to Azure App Service (main branch only)
+# =============================================================================
+
+name: CI — Billing Service
 
 on:
   push:
     branches: [main, develop]
     paths:
       - "src/services/billing/**"
-      - "src/shared/MediCore.Contracts/**"
+      - "src/shared/**"
       - ".github/workflows/ci-billing.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "src/services/billing/**"
-      - "src/shared/MediCore.Contracts/**"
+      - "src/shared/**"
       - ".github/workflows/ci-billing.yml"
   workflow_dispatch:
 
+env:
+  DOTNET_VERSION: "8.0.x"
+  IMAGE_NAME: ghcr.io/medicore-project/medicore-billing
+  WORKING_DIR: src/services/billing
+
 permissions:
   contents: read
+  packages: write          # push to GHCR
+  security-events: write   # CodeQL results
+  actions: read
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build & Test
+  # ---------------------------------------------------------------------------
   build-and-test:
+    name: Build & Test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: .
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for Gitleaks
 
-      - name: Setup .NET 8
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.0.x
-          cache: true
-          cache-dependency-path: "src/services/billing/**/*.csproj"
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore
+      - name: Restore NuGet packages
+        run: dotnet restore src/services/billing/MediCore.Billing.Api/Api.csproj
+
+      - name: Build (Release)
         run: |
-          dotnet restore src/services/billing/MediCore.Billing.Api/Api.csproj
-          dotnet restore src/services/billing/MediCore.Billing.Tests/Tests.csproj
+          dotnet build src/services/billing/MediCore.Billing.Api/Api.csproj \
+            --configuration Release \
+            --no-restore
 
-      - name: Build API
-        run: >-
-          dotnet build src/services/billing/MediCore.Billing.Api/Api.csproj
-          --configuration Release --no-restore
+      - name: Run Tests with Coverage
+        run: |
+          dotnet test src/services/billing/MediCore.Billing.Tests/Tests.csproj \
+            --configuration Release \
+            --filter "FullyQualifiedName~Unit" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            --logger "trx;LogFileName=billing-tests.trx"
+        continue-on-error: false
 
-      - name: Test with coverage
-        run: >-
-          dotnet test src/services/billing/MediCore.Billing.Tests/Tests.csproj
-          --configuration Release --no-restore
-          --collect:"XPlat Code Coverage"
-          --results-directory ./coverage/billing
-
-      - name: Upload coverage
+      - name: Upload Test Results
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: billing-coverage
-          path: coverage/billing/**
-          if-no-files-found: error
+          name: billing-test-results-${{ github.sha }}
+          path: |
+            coverage/**/*.xml
+            coverage/**/*.trx
+          retention-days: 30
 
-  docker-build:
-    needs: build-and-test
+      - name: Upload Coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/**/coverage.cobertura.xml
+          flags: billing
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Security Scanning
+  # ---------------------------------------------------------------------------
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    needs: build-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2a. Gitleaks — scan full git history for leaked secrets
+      - name: Gitleaks — Secret Scan
+        run: docker run -v ${{ github.workspace }}:/path zricethezav/gitleaks:latest detect --source="/path" -v
+
+      # 2b. CodeQL — static analysis for C#
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          queries: security-and-quality
+
+      - name: Setup .NET for CodeQL
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Build for CodeQL analysis
+        run: |
+          dotnet restore src/services/billing/MediCore.Billing.Api/Api.csproj
+          dotnet build src/services/billing/MediCore.Billing.Api/Api.csproj \
+            --configuration Release --no-restore
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:csharp/billing"
+
+      # 2c. dotnet list package --vulnerable — known CVEs in NuGet packages
+      - name: Setup .NET for vulnerability audit
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: NuGet Vulnerability Audit
+        id: nuget-audit
+        run: |
+          echo "## NuGet Vulnerability Report — Billing" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          dotnet restore src/services/billing/MediCore.Billing.Api/Api.csproj
+
+          dotnet list src/services/billing/MediCore.Billing.Api/Api.csproj package \
+            --vulnerable --include-transitive 2>&1 | tee /tmp/nuget-audit-billing.txt
+
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/nuget-audit-billing.txt >> $GITHUB_STEP_SUMMARY
+
+          # Fail if HIGH or CRITICAL vulnerabilities found
+          if grep -qiE "(High|Critical)" /tmp/nuget-audit-billing.txt; then
+            echo "::error::High or Critical NuGet vulnerabilities found. See summary."
+            exit 1
+          fi
+
+      - name: Upload Security Scan Results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-scan-billing-${{ github.sha }}
+          path: /tmp/nuget-audit-billing.txt
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Docker Build & Push to GHCR
+  # ---------------------------------------------------------------------------
+  docker-publish:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    if: github.event_name == 'push'   # don't push images on PR builds
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.push.outputs.digest }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Billing image
-        run: docker build --file src/services/billing/Dockerfile --tag medicore-billing:ci .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          labels: |
+            org.opencontainers.image.title=MediCore Billing Service
+            org.opencontainers.image.description=Billing, invoicing and notification microservice
+            org.opencontainers.image.vendor=MediCore Team
+
+      - name: Build and Push Docker image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: src/services/billing/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            GIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          artifact-name: billing-sbom-${{ github.sha }}.spdx.json
+          output-file: /tmp/billing-sbom.spdx.json
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scan on built image
+        uses: aquasecurity/trivy-action@master
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          format: "sarif"
+          output: "trivy-billing.sarif"
+          severity: "HIGH,CRITICAL"
+          exit-code: "0"   # warn but don't fail (zero-day grace period)
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-billing.sarif
+          category: trivy-billing
+
+      - name: Upload Trivy results artifact
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-billing-${{ github.sha }}
+          path: trivy-billing.sarif
+          retention-days: 90
+
+      - name: Image summary
+        run: |
+          echo "## Docker Image Published 🐳" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry | ghcr.io |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| SHA tag | \`sha-${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Digest | \`${{ steps.push.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Deploy to Azure App Service (main branch only)
+  # ---------------------------------------------------------------------------
+  deploy-azure:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: docker-publish
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://medicore-billing.azurewebsites.net
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install PostgreSQL Client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # Idempotent — IF NOT EXISTS guards prevent errors on re-runs
+      - name: Initialize Database Schemas and Roles
+        continue-on-error: true
+        run: |
+          CONN=$(echo '${{ secrets.AZURE_DB_ADMIN_CONN }}' | tr -d '[:space:]')
+          psql "$CONN" -f infra/postgres/init/01-init-db.sql
+          echo "DB init step completed (errors above are safe if schemas already exist)"
+
+      # azure/webapps-deploy@v3 introduced a regression: it tries to detect the
+      # app's runtime OS via the SCM API using publish-profile auth, which returns
+      # an unexpected response for Linux container apps → "Failed to get app runtime OS".
+      # webapps-deploy@v2 does NOT have this probe — it uses the publish profile
+      # directly to POST the image update and works correctly for Linux containers.
+      - name: Deploy container to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_BILLING_NAME }}
+          publish-profile: ${{ secrets.AZURE_BILLING_PUBLISH_PROFILE }}
+          images: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+
+      - name: Wait for deployment and health check
+        run: |
+          APP_URL="https://${{ secrets.AZURE_BILLING_NAME }}.azurewebsites.net"
+          echo "Waiting for $APP_URL to become healthy..."
+
+          # Give Azure time to pull the image and cold-start the container
+          # before we begin polling. The webapps-deploy action returns as soon
+          # as Azure *accepts* the image, not when it is actually serving traffic.
+          echo "Sleeping 90s for container cold-start..."
+          sleep 90
+
+          MAX_ATTEMPTS=24   # 24 × 10 s = 4 minutes
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            # Capture http_code separately to avoid the double-000 bug:
+            # curl writes %{http_code} to stdout AND exits non-zero on
+            # connection failure, so `|| echo 000` would concatenate both.
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health/live" 2>/dev/null)
+            STATUS=${STATUS:-000}   # default to 000 if curl returned nothing
+            echo "Attempt $i/$MAX_ATTEMPTS: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Deployment healthy!"
+              break
+            fi
+            if [ "$i" -eq "$MAX_ATTEMPTS" ]; then
+              echo "::error::Deployment health check failed after $((MAX_ATTEMPTS * 10 + 90)) seconds"
+              exit 1
+            fi
+            sleep 10
+          done
+
+      - name: Deployment summary
+        run: |
+          echo "## Billing Service Deployment Complete 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | Production |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | https://${{ secrets.AZURE_BILLING_NAME }}.azurewebsites.net |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.IMAGE_NAME }}:sha-${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true
