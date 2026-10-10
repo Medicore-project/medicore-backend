@@ -1,12 +1,17 @@
 # =============================================================================
 # MediCore — Kafka & Dead-Letter Topic Alerting Rules
 # =============================================================================
+# The exporter is scraped twice (container + host.docker.internal:9308, which
+# Compose publishes), so every series exists once per `instance`.
+# `max without (instance)` collapses the copies before summing; a plain `sum`
+# would double the values.
+# =============================================================================
 
 groups:
   - name: kafka-dlt-alerts
     rules:
       - alert: KafkaDeadLetterQueueNotEmpty
-        expr: sum by (topic) (kafka_topic_partition_current_offset{topic=~".*\\.dlt"}) > 0
+        expr: sum by (topic) (max without (instance) (kafka_topic_partition_current_offset{topic=~".*\\.dlt"})) > 0
         for: 0m
         labels:
           severity: critical
@@ -16,7 +21,7 @@ groups:
           description: "Topic {{ $labels.topic }} has depth {{ $value }}. Messages failed processing after maximum retries and were routed to the dead-letter topic."
 
       - alert: KafkaConsumerLagHigh
-        expr: sum by (consumergroup, topic) (kafka_consumergroup_lag) > 50
+        expr: sum by (consumergroup, topic) (max without (instance) (kafka_consumergroup_lag)) > 50
         for: 1m
         labels:
           severity: warning

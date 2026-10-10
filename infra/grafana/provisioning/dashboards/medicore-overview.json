@@ -102,16 +102,16 @@
         "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [
-            { "options": { "0": { "color": "orange", "index": 1, "text": "NOT YET" }, "1": { "color": "green", "index": 0, "text": "UP" } }, "type": "value" }
+            { "options": { "0": { "color": "red",   "index": 1, "text": "DOWN" }, "1": { "color": "green", "index": 0, "text": "UP" } }, "type": "value" }
           ],
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "orange", "value": null }, { "color": "green", "value": 1 } ] }
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
         }
       },
       "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
       "id": 5,
       "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "targets": [ { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "max(up{job=\"billing-api\"})", "legendFormat": "Billing", "refId": "A" } ],
-      "title": "Billing Service (Sprint 4)",
+      "title": "Billing Service",
       "type": "stat"
     },
 
@@ -132,7 +132,7 @@
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 6 },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 6 },
       "id": 10,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -151,7 +151,7 @@
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 6 },
       "id": 11,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -169,13 +169,31 @@
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 6 },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 6 },
       "id": 12,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "sum by (method, endpoint) (max without (instance) (rate(http_requests_received_total{job=\"appointment-api\"}[1m])))", "legendFormat": "Appointment — {{method}} {{endpoint}}", "refId": "A" }
       ],
       "title": "Appointment — Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
+      "id": 13,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "sum by (method, endpoint) (max without (instance) (rate(http_requests_received_total{job=\"billing-api\"}[1m])))", "legendFormat": "Billing — {{method}} {{endpoint}}", "refId": "A" }
+      ],
+      "title": "Billing — Request Rate",
       "type": "timeseries"
     },
 
@@ -197,7 +215,7 @@
           "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.01 } ] }
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 15 },
       "id": 20,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -216,7 +234,7 @@
           "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.01 } ] }
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 15 },
       "id": 21,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -235,13 +253,32 @@
           "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.01 } ] }
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 15 },
       "id": 22,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "sum(max without (instance) (rate(http_requests_received_total{job=\"appointment-api\",code=~\"5..\"}[1m]))) or vector(0)", "legendFormat": "Appointment 5xx", "refId": "A" }
       ],
       "title": "Appointment — 5xx Error Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "custom": { "lineWidth": 2, "fillOpacity": 20 },
+          "unit": "reqps",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.01 } ] }
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 15 },
+      "id": 23,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "sum(max without (instance) (rate(http_requests_received_total{job=\"billing-api\",code=~\"5..\"}[1m]))) or vector(0)", "legendFormat": "Billing 5xx", "refId": "A" }
+      ],
+      "title": "Billing — 5xx Error Rate",
       "type": "timeseries"
     },
 
@@ -262,7 +299,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 24 },
       "id": 30,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -282,7 +319,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 24 },
       "id": 31,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -302,7 +339,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 24 },
       "id": 32,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -311,6 +348,26 @@
         { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.99, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"appointment-api\"}[5m]))))", "legendFormat": "p99", "refId": "C" }
       ],
       "title": "Appointment — Latency Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5 },
+          "unit": "s"
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 24 },
+      "id": 33,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.50, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"billing-api\"}[5m]))))", "legendFormat": "p50", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.95, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"billing-api\"}[5m]))))", "legendFormat": "p95", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus-medicore" }, "expr": "histogram_quantile(0.99, sum by (le) (max without (instance) (rate(http_request_duration_seconds_bucket{job=\"billing-api\"}[5m]))))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "title": "Billing — Latency Percentiles",
       "type": "timeseries"
     },
 
@@ -337,7 +394,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
-          "expr": "sum by (consumergroup, topic) (kafka_consumergroup_lag)",
+          "expr": "sum by (consumergroup, topic) (max without (instance) (kafka_consumergroup_lag))",
           "legendFormat": "{{consumergroup}} — {{topic}}",
           "refId": "A"
         }
@@ -375,7 +432,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
-          "expr": "sum by (topic) (kafka_topic_partition_current_offset{topic=~\"^.*\\\\.dlt$\"})",
+          "expr": "sum by (topic) (max without (instance) (kafka_topic_partition_current_offset{topic=~\"^.*\\\\.dlt$\"}))",
           "legendFormat": "{{topic}}",
           "refId": "A"
         }
@@ -398,7 +455,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus-medicore" },
-          "expr": "sum by (topic) (kafka_topic_partition_current_offset{topic=~\"^.*\\\\.dlt$\"})",
+          "expr": "sum by (topic) (max without (instance) (kafka_topic_partition_current_offset{topic=~\"^.*\\\\.dlt$\"}))",
           "legendFormat": "{{topic}} depth",
           "refId": "A"
         }
@@ -410,12 +467,12 @@
   ],
   "refresh": "30s",
   "schemaVersion": 38,
-  "tags": ["medicore", "sprint-2", "sprint-3", "dlt", "kafka"],
+  "tags": ["medicore", "sprint-2", "sprint-3", "sprint-4", "billing", "dlt", "kafka"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
   "title": "MediCore — Overview",
   "uid": "medicore-overview",
-  "version": 2
+  "version": 3
 }
