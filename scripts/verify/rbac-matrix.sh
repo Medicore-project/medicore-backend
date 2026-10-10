@@ -107,11 +107,24 @@ if [[ -n "${PATIENT_NUMBER:-}" && -n "${PATIENT_DOB:-}" ]]; then
   [[ -z "${TOKEN[P]}" ]] && echo "warning: patient identify failed" >&2
 fi
 
+# The gateway's "global" rate limiter allows 100 requests per minute per IP; the
+# matrix makes ~230. Pace the calls under the limit, and if a 429 still slips
+# through, wait for the window to reset and retry so it never lands in a cell.
+PACE_SECONDS="${PACE_SECONDS:-0.7}"
+
 call() {    # call <method> <path> <body> <token> → status code
   local args=(-s -o /dev/null -m "$TIMEOUT" -w '%{http_code}' -X "$1")
   [[ -n "$3" ]] && args+=(-H "Content-Type: application/json" -d "$3")
   [[ -n "$4" ]] && args+=(-H "Authorization: Bearer $4")
-  local code; code=$(curl "${args[@]}" "$GW$2" 2>/dev/null); echo "${code:-000}"
+  local code attempt
+  for attempt in 1 2 3 4 5; do
+    sleep "$PACE_SECONDS"
+    code=$(curl "${args[@]}" "$GW$2" 2>/dev/null)
+    [[ "$code" != "429" ]] && break
+    echo "rate limited on $1 $2, waiting 20 s (attempt $attempt)" >&2
+    sleep 20
+  done
+  echo "${code:-000}"
 }
 
 START_UTC=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -151,6 +164,7 @@ echo "|---|---|---|---|---|---|---|---|"
 printf '%s' "$TABLE"
 
 if [[ -n "${AUDIT_OUT:-}" && -n "${TOKEN[A]:-}" ]]; then
+  sleep 60   # let the gateway's rate-limit window reset before the audit query
   {
     echo "# SCRUM-149 — Audit entries for the RBAC run"
     echo
