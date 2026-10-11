@@ -1,4 +1,5 @@
 using FluentValidation;
+using MediCore.Identity.Api.Authorization;
 using MediCore.Identity.Application.DTOs;
 using MediCore.Identity.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -10,15 +11,17 @@ namespace MediCore.Identity.Api.Controllers;
 /// Staff profiles and their role assignments.
 /// </summary>
 /// <remarks>
-/// Reading is open to any signed-in user because the whole application leans on it: the booking
+/// Reading is open to every clinic role because the whole application leans on it: the booking
 /// grid and leave pages list doctors, and the department and specialization pages list who is
-/// assigned where. Creating staff, editing them, deactivating them and granting roles are all
-/// Admin's alone — the action-level <c>AdminOnly</c> combines with the controller's blanket
-/// authentication rather than replacing it.
+/// assigned where. It is not open to any signed-in caller: a patient's role-less booking token
+/// is a valid JWT too, and a bare <c>[Authorize]</c> handed it the whole staff directory.
+/// Creating staff, editing them, deactivating them and granting roles are all Admin's alone —
+/// the action-level <c>AdminOnly</c> combines with the controller's <c>StaffReader</c> rather
+/// than replacing it.
 /// </remarks>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = IdentityAuthorizationPolicies.StaffReader)]
 public class StaffController : ControllerBase
 {
     private readonly IStaffRepository _staffRepository;
