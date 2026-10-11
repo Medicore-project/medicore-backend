@@ -31,7 +31,10 @@ function Invoke-MediCoreApi {
         $request.Body = $Body | ConvertTo-Json -Depth 10 -Compress
     }
 
-    Invoke-RestMethod @request
+    # Windows PowerShell 5.1 returns a JSON array as one Object[] that @(...) does
+    # not unroll, so a name filter over a list matched the whole list. Unroll here
+    # so callers get the elements in both 5.1 and PowerShell 7.
+    Invoke-RestMethod @request | ForEach-Object { $_ }
 }
 
 function Get-OrCreateNamedRecord {

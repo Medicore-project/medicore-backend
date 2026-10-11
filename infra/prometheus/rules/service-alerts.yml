@@ -1,0 +1,22 @@
+# =============================================================================
+# MediCore — Service availability alerting rules
+# =============================================================================
+# Every API job lists two targets: the Compose container and
+# host.docker.internal (dotnet run). Only one of them runs at a time, so a raw
+# `up == 0` would fire permanently for the idle one. `max by (job)` treats the
+# service as up while either target answers — the same reasoning as the
+# dashboard's `max(up{job=...})` health tiles.
+# =============================================================================
+
+groups:
+  - name: service-availability
+    rules:
+      - alert: ServiceDown
+        expr: max by (job) (up{job=~"gateway|identity-api|patient-api|appointment-api|billing-api"}) == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: devops
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "No /metrics target for {{ $labels.job }} has answered a scrape for at least 1 minute."
