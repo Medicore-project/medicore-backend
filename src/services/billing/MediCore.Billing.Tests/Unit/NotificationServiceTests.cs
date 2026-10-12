@@ -112,6 +112,53 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
+    public async Task Partial_payment_sends_a_receipt_showing_what_was_paid_and_what_is_still_due()
+    {
+        var patientId = Guid.NewGuid();
+        var fixture = new Fixture(new PatientContact
+        {
+            PatientId = patientId,
+            FullName = "Saman Jay",
+            Email = "saman@example.com"
+        });
+        fixture.Templates.Add(Template(
+            NotificationService.PartialReceiptTemplate,
+            "Payment received for {{invoiceNumber}}",
+            "{{patientName}}: {{amount}} {{currency}} by {{method}}; paid {{totalPaid}}, due {{balanceDue}}"));
+        var partPaid = new InvoicePartiallyPaidEvent
+        {
+            MessageId = Guid.NewGuid(),
+            InvoiceId = Guid.NewGuid(),
+            InvoiceNumber = "INV-20261012-ABC",
+            PatientId = patientId,
+            Amount = 400m,
+            Method = "Card",
+            TotalPaid = 650m,
+            BalanceDue = 350m,
+            Currency = "LKR",
+            CorrelationId = "corr-part"
+        };
+
+        var result = await fixture.Service.HandleInvoicePartiallyPaidAsync(partPaid);
+
+        Assert.Equal(NotificationDeliveryResult.Sent, result);
+        var sent = Assert.Single(fixture.Email.Sent);
+        Assert.Equal("saman@example.com", sent.Recipient);
+        Assert.Equal("Payment received for INV-20261012-ABC", sent.Subject);
+        Assert.Equal("Saman Jay: 400.00 LKR by Card; paid 650.00, due 350.00", sent.Body);
+        var log = Assert.Single(fixture.Logs.Items);
+        Assert.Equal(NotificationService.PartialReceiptTemplate, log.TemplateCode);
+        Assert.Equal("invoice.partially-paid", log.EventType);
+        Assert.Equal(NotificationStatuses.Sent, log.Status);
+
+        // Redelivered: the same payment is not receipted twice.
+        Assert.Equal(
+            NotificationDeliveryResult.Duplicate,
+            await fixture.Service.HandleInvoicePartiallyPaidAsync(partPaid));
+        Assert.Single(fixture.Email.Sent);
+    }
+
+    [Fact]
     public async Task Failed_send_is_logged_and_rethrown_for_retry_routing()
     {
         var patientId = Guid.NewGuid();

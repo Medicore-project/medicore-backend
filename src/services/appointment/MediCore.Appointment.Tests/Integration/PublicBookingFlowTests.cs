@@ -81,7 +81,10 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         Assert.Equal(_doctorId, appointment.DoctorId);
         Assert.Equal(chosen.SlotId, appointment.SlotId);
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);
-        Assert.Equal(ServiceCodes.SpecialistConsultation, appointment.ServiceCode);
+        // The doctor's own specialization, not a generic specialist code: "Integration-<hex>" is
+        // already letters, digits and one hyphen, so only its case changes.
+        var expectedServiceCode = $"SPEC-{_specialization.ToUpperInvariant()}";
+        Assert.Equal(expectedServiceCode, appointment.ServiceCode);
 
         // ── AC1: the slot is taken and no longer offered ──────────────────────
         var remaining = await anonymous.GetFromJsonAsync<List<PublicSlotResponse>>(
@@ -99,7 +102,7 @@ public sealed class PublicBookingFlowTests : IClassFixture<AppointmentApiFactory
         Assert.Equal("appointment-events", row.Topic);
         Assert.Equal("appointment.booked", row.EventType);
         Assert.Null(row.ProcessedOnUtc);
-        Assert.Contains(ServiceCodes.SpecialistConsultation, row.Payload);
+        Assert.Contains(expectedServiceCode, row.Payload);
     }
 
     [Fact]

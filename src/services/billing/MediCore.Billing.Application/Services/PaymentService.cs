@@ -80,6 +80,14 @@ public sealed class PaymentService : IPaymentService
                 BillingOutboxMessages.InvoicePaid(invoice, payment, correlationId, nowUtc),
                 cancellationToken);
         }
+        else
+        {
+            // A part payment gets a receipt too, saying what is still owed. One event or the
+            // other, never both, so the payment that settles the invoice is not receipted twice.
+            await _outboxRepository.AddAsync(
+                BillingOutboxMessages.InvoicePartiallyPaid(invoice, payment, correlationId, nowUtc),
+                cancellationToken);
+        }
 
         try
         {

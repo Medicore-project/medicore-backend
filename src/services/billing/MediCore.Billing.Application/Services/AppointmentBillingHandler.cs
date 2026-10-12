@@ -12,6 +12,15 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
     public const string ConsumerGroup = "medicore-billing";
     public const string SourceTopic = "appointment-events";
 
+    /// <summary>
+    /// The tariff a specialization is billed at until it has one of its own. The appointment
+    /// service names each specialization's code <c>SPEC-&lt;NAME&gt;</c>; this is the same code
+    /// with no specialization in it.
+    /// </summary>
+    public const string DefaultSpecialistServiceCode = "SPEC-CONSULT";
+
+    private const string SpecializationCodePrefix = "SPEC-";
+
     private readonly IInvoiceRepository _invoiceRepository;
     private readonly IServiceTariffRepository _tariffRepository;
     private readonly IProcessedMessageRepository _processedMessageRepository;
@@ -54,9 +63,19 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
             return await SaveAsync(AppointmentBillingResult.InvoiceAlreadyExists, cancellationToken);
         }
 
+        var serviceCode = bookedEvent.ServiceCode.Trim();
         var pricedAtUtc = EnsureUtc(bookedEvent.SlotStart);
-        var tariff = await _tariffRepository.FindEffectiveAsync(
-            bookedEvent.ServiceCode.Trim(), pricedAtUtc, cancellationToken);
+        var tariff = await _tariffRepository.FindEffectiveAsync(serviceCode, pricedAtUtc, cancellationToken);
+
+        // A specialization with no tariff of its own is still a specialist visit, so it is billed
+        // at the default specialist tariff instead of being left unpriced. The invoice keeps the
+        // specialization's own code; only the price is borrowed.
+        if (tariff is null && IsSpecializationCode(serviceCode))
+        {
+            tariff = await _tariffRepository.FindEffectiveAsync(
+                DefaultSpecialistServiceCode, pricedAtUtc, cancellationToken);
+        }
+
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
         var invoiceId = Guid.NewGuid();
         var missingTariff = tariff is null;
@@ -69,13 +88,13 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
             AppointmentId = bookedEvent.AppointmentId,
             PatientId = bookedEvent.PatientId,
             DepartmentId = bookedEvent.DepartmentId,
-            ServiceCode = bookedEvent.ServiceCode.Trim(),
+            ServiceCode = serviceCode,
             Status = InvoiceStatus.Draft,
             Currency = tariff?.Currency ?? "LKR",
             Subtotal = unitPrice ?? 0m,
             Total = unitPrice ?? 0m,
             RequiresManualPricing = missingTariff,
-            PricingIssue = missingTariff ? $"No effective tariff for '{bookedEvent.ServiceCode.Trim()}'." : null,
+            PricingIssue = missingTariff ? $"No effective tariff for '{serviceCode}'." : null,
             IssuedAtUtc = EnsureUtc(bookedEvent.OccurredAtUtc),
             CreatedAtUtc = nowUtc,
             Lines =
@@ -84,8 +103,8 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
                 {
                     InvoiceId = invoiceId,
                     TariffId = tariff?.TariffId,
-                    ServiceCode = bookedEvent.ServiceCode.Trim(),
-                    Description = tariff?.Description ?? $"Manual pricing required: {bookedEvent.ServiceCode.Trim()}",
+                    ServiceCode = serviceCode,
+                    Description = tariff?.Description ?? $"Manual pricing required: {serviceCode}",
                     Quantity = 1,
                     UnitPrice = unitPrice,
                     LineTotal = unitPrice ?? 0m
@@ -260,6 +279,10 @@ public sealed class AppointmentBillingHandler : IAppointmentBillingHandler
         if (cancelledEvent.Reason.Trim().Length > 500) throw new ArgumentException("Reason must not exceed 500 characters.");
         if (cancelledEvent.Version != 1) throw new ArgumentException("Only event version 1 is supported.");
     }
+
+    private static bool IsSpecializationCode(string serviceCode) =>
+        serviceCode.StartsWith(SpecializationCodePrefix, StringComparison.Ordinal)
+        && !string.Equals(serviceCode, DefaultSpecialistServiceCode, StringComparison.Ordinal);
 
     private static string CreateInvoiceNumber(Guid invoiceId, DateTime nowUtc) =>
         $"INV-{nowUtc:yyyyMMdd}-{invoiceId:N}"[..21].ToUpperInvariant();

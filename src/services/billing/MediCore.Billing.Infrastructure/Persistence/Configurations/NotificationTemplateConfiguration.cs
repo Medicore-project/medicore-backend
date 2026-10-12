@@ -9,6 +9,7 @@ public sealed class NotificationTemplateConfiguration : IEntityTypeConfiguration
     public static readonly Guid WelcomeId = Guid.Parse("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee01");
     public static readonly Guid AppointmentId = Guid.Parse("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee02");
     public static readonly Guid ReceiptId = Guid.Parse("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee03");
+    public static readonly Guid PartialReceiptId = Guid.Parse("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee04");
 
     public void Configure(EntityTypeBuilder<NotificationTemplate> builder)
     {
@@ -51,6 +52,16 @@ public sealed class NotificationTemplateConfiguration : IEntityTypeConfiguration
                 Name = "Payment receipt",
                 SubjectTemplate = "MediCore payment receipt",
                 BodyTemplate = "Hello {{patientName}},\n\nWe received {{amount}} LKR by {{method}} for invoice {{invoiceId}}. Thank you.",
+                IsActive = true,
+                CreatedAtUtc = createdAt
+            },
+            new NotificationTemplate
+            {
+                NotificationTemplateId = PartialReceiptId,
+                Code = "PARTIAL_PAYMENT_RECEIPT",
+                Name = "Partial payment receipt",
+                SubjectTemplate = "MediCore payment received",
+                BodyTemplate = "Hello {{patientName}},\n\nWe received {{amount}} {{currency}} by {{method}} towards invoice {{invoiceNumber}}. Paid so far: {{totalPaid}} {{currency}}. Balance still due: {{balanceDue}} {{currency}}.",
                 IsActive = true,
                 CreatedAtUtc = createdAt
             });

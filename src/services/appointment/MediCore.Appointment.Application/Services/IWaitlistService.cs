@@ -17,8 +17,8 @@ public interface IWaitlistService
     /// accepted by the front desk still records who it is for. Null for a staff caller.
     /// </param>
     /// <param name="serviceCode">
-    /// A workflow hint. General versus specialist consultation is resolved from the trusted doctor
-    /// cache; only an explicit follow-up is preserved.
+    /// What the caller believes the visit is. It has no effect: the code kept on the entry is
+    /// always resolved from the trusted doctor cache.
     /// </param>
     Task<WaitlistJoinResult> JoinAsync(
         Guid doctorId,

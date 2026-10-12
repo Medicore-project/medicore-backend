@@ -50,6 +50,8 @@ public sealed class ServiceTariffConfiguration : IEntityTypeConfiguration<Servic
                 EffectiveFromUtc = effectiveFrom,
                 IsActive = true
             },
+            // Retired: follow-ups can no longer be booked. Kept, inactive, because invoices issued
+            // while they could still point at this row.
             new ServiceTariff
             {
                 TariffId = FollowUpId,
@@ -58,7 +60,7 @@ public sealed class ServiceTariffConfiguration : IEntityTypeConfiguration<Servic
                 UnitPrice = 1500m,
                 Currency = "LKR",
                 EffectiveFromUtc = effectiveFrom,
-                IsActive = true
+                IsActive = false
             });
     }
 }

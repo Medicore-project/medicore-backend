@@ -45,6 +45,18 @@ public class CreateStaffRequestValidator : AbstractValidator<CreateStaffRequest>
     }
 }
 
+/// <summary>The same password rule a new staff member's first password has to meet.</summary>
+public class ChangeStaffPasswordRequestValidator : AbstractValidator<ChangeStaffPasswordRequest>
+{
+    public ChangeStaffPasswordRequestValidator()
+    {
+        RuleFor(x => x.NewPassword)
+            .NotEmpty().WithMessage("Password is required.")
+            .MinimumLength(8).WithMessage("Password must be at least 8 characters long.")
+            .MaximumLength(100).WithMessage("Password must not exceed 100 characters.");
+    }
+}
+
 public class UpdateStaffRequestValidator : AbstractValidator<UpdateStaffRequest>
 {
     public UpdateStaffRequestValidator()

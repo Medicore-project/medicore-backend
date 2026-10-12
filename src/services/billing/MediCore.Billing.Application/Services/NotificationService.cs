@@ -15,6 +15,7 @@ public sealed class NotificationService : INotificationService
     public const string WelcomeTemplate = "PATIENT_WELCOME";
     public const string AppointmentTemplate = "APPOINTMENT_CONFIRMATION";
     public const string ReceiptTemplate = "PAYMENT_RECEIPT";
+    public const string PartialReceiptTemplate = "PARTIAL_PAYMENT_RECEIPT";
 
     private readonly INotificationTemplateRepository _templates;
     private readonly INotificationLogRepository _logs;
@@ -119,6 +120,34 @@ public sealed class NotificationService : INotificationService
                 ["invoiceId"] = integrationEvent.InvoiceId.ToString(),
                 ["amount"] = integrationEvent.Amount.ToString("0.00", CultureInfo.InvariantCulture),
                 ["method"] = integrationEvent.Method.Trim()
+            },
+            cancellationToken);
+    }
+
+    public async Task<NotificationDeliveryResult> HandleInvoicePartiallyPaidAsync(
+        InvoicePartiallyPaidEvent integrationEvent,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateEvent(integrationEvent, integrationEvent.PatientId);
+        if (await WasSentAsync(integrationEvent.MessageId, PartialReceiptTemplate, cancellationToken))
+        {
+            return NotificationDeliveryResult.Duplicate;
+        }
+        var contact = await RequiredContactAsync(integrationEvent.PatientId, cancellationToken);
+        return await DeliverAsync(
+            integrationEvent,
+            PartialReceiptTemplate,
+            contact,
+            new Dictionary<string, string>
+            {
+                ["patientName"] = contact.FullName,
+                ["invoiceId"] = integrationEvent.InvoiceId.ToString(),
+                ["invoiceNumber"] = integrationEvent.InvoiceNumber.Trim(),
+                ["amount"] = integrationEvent.Amount.ToString("0.00", CultureInfo.InvariantCulture),
+                ["method"] = integrationEvent.Method.Trim(),
+                ["totalPaid"] = integrationEvent.TotalPaid.ToString("0.00", CultureInfo.InvariantCulture),
+                ["balanceDue"] = integrationEvent.BalanceDue.ToString("0.00", CultureInfo.InvariantCulture),
+                ["currency"] = integrationEvent.Currency.Trim()
             },
             cancellationToken);
     }

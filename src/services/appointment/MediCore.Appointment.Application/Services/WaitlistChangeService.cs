@@ -114,12 +114,14 @@ public sealed class WaitlistChangeService : IWaitlistChangeService
 
         // AC4. The same write as a booking, so downstream cannot tell the two apart. The patient's
         // details come from the entry, not the caller: a receptionist accepting on the phone has
-        // a staff token with no patient claims.
+        // a staff token with no patient claims. The service code is resolved now, as a booking's
+        // is, not read off the entry: an entry can be older than the doctor's current
+        // specialization, or than the set of codes billing still prices.
         var appointment = await AppointmentCreation.CreateAsync(
             slot,
             entry.PatientId,
             new BookingPatientDetails(entry.PatientNumber, entry.PatientName),
-            entry.ServiceCode,
+            ServiceCodes.ResolveForDoctor(doctor.Specialization),
             caller.Actor,
             correlationId,
             nowUtc,
