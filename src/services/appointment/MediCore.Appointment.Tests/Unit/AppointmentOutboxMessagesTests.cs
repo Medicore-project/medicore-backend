@@ -99,6 +99,17 @@ public sealed class AppointmentOutboxMessagesTests
     }
 
     [Fact]
+    public void The_booking_event_carries_the_doctors_department_for_billing_revenue()
+    {
+        var departmentId = Guid.NewGuid();
+        var message = AppointmentOutboxMessages.Booked(Appointment(), "corr-1", OccurredOnUtc, departmentId);
+
+        Assert.Equal(departmentId, Deserialize(message).DepartmentId);
+        Assert.Contains("\"departmentId\"", message.Payload);
+        Assert.Null(Deserialize(AppointmentOutboxMessages.Booked(Appointment(), "corr-2", OccurredOnUtc)).DepartmentId);
+    }
+
+    [Fact]
     public void The_payload_is_camel_cased_like_every_other_producer_on_this_topic()
     {
         var message = AppointmentOutboxMessages.Booked(Appointment(), "corr-1", OccurredOnUtc);

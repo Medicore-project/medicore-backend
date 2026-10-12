@@ -31,7 +31,8 @@ public static class AppointmentCreation
         IAppointmentRepository appointmentRepository,
         IOutboxMessageRepository outboxRepository,
         IAppointmentHistoryRepository historyRepository,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? departmentId = null)
     {
         slot.Status = SlotStatus.Booked;
         slot.UpdatedBy = actor;
@@ -54,7 +55,7 @@ public static class AppointmentCreation
 
         await appointmentRepository.AddAsync(appointment, cancellationToken);
         await outboxRepository.AddAsync(
-            AppointmentOutboxMessages.Booked(appointment, correlationId, nowUtc),
+            AppointmentOutboxMessages.Booked(appointment, correlationId, nowUtc, departmentId),
             cancellationToken);
 
         // SCRUM-36: every appointment's history starts with the booking that created it.

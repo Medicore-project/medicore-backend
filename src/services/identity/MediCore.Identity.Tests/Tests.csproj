@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MediCore.Identity.Api\Api.csproj" />
     <ProjectReference Include="..\MediCore.Identity.Application\Application.csproj" />
   </ItemGroup>
 

@@ -30,13 +30,15 @@ public static class AppointmentOutboxMessages
     public static OutboxMessage Booked(
         AppointmentEntity appointment,
         string correlationId,
-        DateTime occurredOnUtc)
+        DateTime occurredOnUtc,
+        Guid? departmentId = null)
     {
         var bookedEvent = new AppointmentBookedEvent
         {
             AppointmentId = appointment.AppointmentId,
             PatientId = appointment.PatientId,
             DoctorId = appointment.DoctorId,
+            DepartmentId = departmentId,
             SlotStart = appointment.StartUtc,
             ServiceCode = appointment.ServiceCode,
             CorrelationId = correlationId,

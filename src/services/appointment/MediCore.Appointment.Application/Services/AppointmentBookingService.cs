@@ -132,7 +132,8 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
 
         // Second rather than first, unlike every other service here: elsewhere the caller supplies
         // the doctor id, but here it comes off the slot, so it cannot be checked any earlier.
-        if (await _doctorRepository.GetActiveAsync(slot.DoctorId, cancellationToken) is null)
+        var doctor = await _doctorRepository.GetActiveAsync(slot.DoctorId, cancellationToken);
+        if (doctor is null)
         {
             return new BookingDoctorNotFoundResult();
         }
@@ -166,14 +167,15 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             slot,
             patientId,
             patientDetails,
-            serviceCode,
+            ServiceCodes.ResolveForDoctor(doctor.Specialization, serviceCode),
             actor,
             correlationId,
             nowUtc,
             _appointmentRepository,
             _outboxRepository,
             _historyRepository,
-            cancellationToken);
+            cancellationToken,
+            doctor.DepartmentId);
 
         // One save for the slot mutation, the appointment, the event row and the history entry,
         // inside the caller's transaction, so AC1 and AC4 of SCRUM-34 commit together or not at

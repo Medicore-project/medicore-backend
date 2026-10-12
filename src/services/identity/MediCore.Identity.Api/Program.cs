@@ -1,3 +1,4 @@
+using MediCore.Identity.Api.Authorization;
 using MediCore.Identity.Api.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -55,10 +56,7 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorizationBuilder()
-    .AddPolicy("AdminOnly",   p => p.RequireRole("Admin"))
-    .AddPolicy("ClinicalStaff", p => p.RequireRole("Admin", "Doctor", "Nurse"))
-    .AddPolicy("FrontDesk",  p => p.RequireRole("Admin", "Receptionist"));
+builder.Services.AddIdentityAuthorization();
 
 
 builder.Services.AddRateLimiter(options =>

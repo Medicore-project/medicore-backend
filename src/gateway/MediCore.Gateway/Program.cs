@@ -125,24 +125,24 @@ builder.Services
         name: "identity",
         failureStatus: HealthStatus.Unhealthy,
         tags: ["services", "ready"])
-    // Patient — stubbed; mark Degraded if unreachable so gateway stays green
+    // Patient service
     .AddUrlGroup(
         new Uri($"{patientBase}/health/live"),
         name: "patient",
         failureStatus: HealthStatus.Degraded,
         tags: ["services"])
-    // Appointment — stubbed
+    // Appointment service
     .AddUrlGroup(
         new Uri($"{appointBase}/health/live"),
         name: "appointment",
         failureStatus: HealthStatus.Degraded,
         tags: ["services"])
-    // Billing — stubbed
+    // Billing — real service; unhealthy counts as failure
     .AddUrlGroup(
         new Uri($"{billingBase}/health/live"),
         name: "billing",
-        failureStatus: HealthStatus.Degraded,
-        tags: ["services"]);
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["services", "ready"]);
 
 // ---------------------------------------------------------------------------
 // Build

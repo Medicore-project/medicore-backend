@@ -25,7 +25,15 @@ public sealed class OutboxMessageRepository : IOutboxMessageRepository
     {
         return await _dbContext.OutboxMessages
             .Where(message => message.ProcessedOnUtc == null)
-            .OrderBy(message => message.OccurredOnUtc)
+            // Only the first pending event for each appointment may be published. A failed
+            // booking must stay ahead of its completion, including across separate batches.
+            .Where(message => !_dbContext.OutboxMessages.Any(earlier =>
+                earlier.ProcessedOnUtc == null
+                && earlier.EventKey == message.EventKey
+                && earlier.OccurredOnUtc < message.OccurredOnUtc))
+            // A repeatedly failing appointment must not occupy every batch slot forever.
+            .OrderBy(message => message.RetryCount)
+            .ThenBy(message => message.OccurredOnUtc)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
     }

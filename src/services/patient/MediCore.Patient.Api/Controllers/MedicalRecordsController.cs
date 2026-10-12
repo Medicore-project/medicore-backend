@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MediCore.Patient.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = PatientAuthorizationPolicies.PatientReader)]
 [Route("api/patients/{patientId:guid}/records")]
 public sealed class MedicalRecordsController : ControllerBase
 {

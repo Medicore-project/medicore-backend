@@ -16,7 +16,7 @@ namespace MediCore.Patient.Api.Controllers;
 /// to prevent dangerous drug interactions.
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Policy = PatientAuthorizationPolicies.PatientReader)]
 [Route("api/patients/{patientId:guid}/allergies")]
 public sealed class AllergiesController : ControllerBase
 {

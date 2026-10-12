@@ -16,7 +16,7 @@ namespace MediCore.Patient.Api.Controllers;
 /// moves it to the read-only history list.
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Policy = PatientAuthorizationPolicies.PatientReader)]
 [Route("api/patients/{patientId:guid}/prescriptions")]
 public sealed class PrescriptionsController : ControllerBase
 {

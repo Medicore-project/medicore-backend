@@ -102,6 +102,19 @@ public sealed class WaitlistServiceTests
     }
 
     [Fact]
+    public async Task A_specialist_waitlist_entry_uses_the_server_resolved_service_code()
+    {
+        var fixture = new Fixture();
+        fixture.Doctors.Specialization = "Neurology";
+
+        await fixture.JoinAsync(serviceCode: ServiceCodes.GeneralConsultation);
+
+        Assert.Equal(
+            ServiceCodes.SpecialistConsultation,
+            Assert.Single(fixture.Waitlist.Added).ServiceCode);
+    }
+
+    [Fact]
     public async Task A_day_with_free_times_is_not_full_and_cannot_be_joined()
     {
         var fixture = new Fixture();
@@ -594,10 +607,17 @@ public sealed class WaitlistServiceTests
     private sealed class FakeDoctorRepository : IDoctorCacheRepository
     {
         public HashSet<Guid> Active { get; } = [];
+        public string Specialization { get; set; } = string.Empty;
 
         public Task<DoctorCache?> GetActiveAsync(Guid doctorId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Active.Contains(doctorId)
-                ? new DoctorCache { DoctorId = doctorId, FullName = "Dr. Silva", IsActive = true }
+                ? new DoctorCache
+                {
+                    DoctorId = doctorId,
+                    FullName = "Dr. Silva",
+                    Specialization = Specialization,
+                    IsActive = true
+                }
                 : null);
 
         public Task<DoctorCache?> GetTrackedByDoctorIdAsync(Guid doctorId, CancellationToken cancellationToken = default) =>

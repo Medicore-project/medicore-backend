@@ -379,11 +379,62 @@ services:
       start_period: 30s
 
   # -------------------------------------------------------------------------
+  # Billing API — Automatic invoice generation and billing
+  # -------------------------------------------------------------------------
+  billing-api:
+    build:
+      context: .
+      dockerfile: src/services/billing/Dockerfile
+    image: medicore-billing:local
+    container_name: medicore-billing
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__BillingDatabase: ${BILLING_DB_CONNECTION}
+      Jwt__Key: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES}
+      Seq__ServerUrl: http://seq:5341
+      Kafka__BootstrapServers: kafka:9092
+      Kafka__AppointmentConsumer__Topic: appointment-events
+      Kafka__AppointmentConsumer__GroupId: medicore-billing
+      Kafka__AppointmentConsumer__RetryDelaySeconds: "2"
+      Kafka__NotificationConsumer__GroupId: medicore-billing-notifications
+      Kafka__NotificationConsumer__Topics__0: patient-events
+      Kafka__NotificationConsumer__Topics__1: appointment-events
+      Kafka__NotificationConsumer__Topics__2: billing-events
+      Kafka__NotificationConsumer__RetryDelaySeconds: "2"
+      Kafka__NotificationConsumer__MaxDeliveryAttempts: "3"
+      Smtp__Host: mailhog
+      Smtp__Port: "1025"
+      Smtp__EnableSsl: "false"
+      Smtp__SendTimeoutSeconds: "10"
+      Smtp__FromAddress: noreply@medicore.local
+      Smtp__FromName: MediCore
+    networks:
+      - medicore-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # -------------------------------------------------------------------------
   # API Gateway — YARP reverse proxy
   # Routes:  /identity/**  → identity-api:8080
   #          /patient/**   → patient-api:8080
-  #          /appointment/** → appointment-api:8080  (stubbed)
-  #          /billing/**   → billing-api:8080  (stubbed)
+  #          /appointment/** → appointment-api:8080
+  #          /billing/**   → billing-api:8080
   #          /auth/**      → identity-api:8080  (login, refresh, logout)
   # http://localhost:5000
   # -------------------------------------------------------------------------
@@ -400,6 +451,8 @@ services:
       patient-api:
         condition: service_healthy
       appointment-api:
+        condition: service_healthy
+      billing-api:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production

@@ -100,12 +100,13 @@ public sealed class AppointmentBookingServiceTests
     // ── AC4: the event carries the service code for billing ──────────────────
 
     [Fact]
-    public async Task A_booking_announces_itself_with_the_service_code_billing_will_invoice()
+    public async Task A_specialist_booking_announces_the_server_resolved_service_code_for_billing()
     {
         var fixture = new Fixture(FreeSlot());
+        fixture.Doctors.Specialization = "Neurology";
 
         await fixture.Service.BookAsync(
-            SlotId, PatientId, ServiceCodes.SpecialistConsultation, "desk", "corr-xyz");
+            SlotId, PatientId, ServiceCodes.GeneralConsultation, "desk", "corr-xyz");
 
         var row = Assert.Single(fixture.Outbox.Added);
         Assert.Equal("appointment-events", row.Topic);
@@ -121,11 +122,12 @@ public sealed class AppointmentBookingServiceTests
     }
 
     [Fact]
-    public async Task A_booking_with_no_service_code_is_a_general_consultation()
+    public async Task A_general_doctor_cannot_be_submitted_as_a_specialist_consultation()
     {
         var fixture = new Fixture(FreeSlot());
 
-        await fixture.Service.BookAsync(SlotId, PatientId, serviceCode: null, "desk", "corr-1");
+        await fixture.Service.BookAsync(
+            SlotId, PatientId, ServiceCodes.SpecialistConsultation, "desk", "corr-1");
 
         Assert.Equal(
             ServiceCodes.GeneralConsultation,
@@ -709,10 +711,17 @@ public sealed class AppointmentBookingServiceTests
     private sealed class FakeDoctorCacheRepository : IDoctorCacheRepository
     {
         public bool IsBookable { get; set; } = true;
+        public string Specialization { get; set; } = string.Empty;
 
         public Task<DoctorCache?> GetActiveAsync(Guid doctorId, CancellationToken cancellationToken = default) =>
             Task.FromResult(IsBookable
-                ? new DoctorCache { DoctorId = doctorId, FullName = "Nimal Perera", IsActive = true }
+                ? new DoctorCache
+                {
+                    DoctorId = doctorId,
+                    FullName = "Nimal Perera",
+                    Specialization = Specialization,
+                    IsActive = true
+                }
                 : null);
 
         public Task<DoctorCache?> GetTrackedByDoctorIdAsync(

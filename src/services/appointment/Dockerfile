@@ -24,14 +24,17 @@ COPY ["src/services/appointment/MediCore.Appointment.Application/Application.csp
 COPY ["src/services/appointment/MediCore.Appointment.Infrastructure/Infrastructure.csproj", "src/services/appointment/MediCore.Appointment.Infrastructure/"]
 COPY ["src/shared/MediCore.Contracts/Contracts.csproj",                                      "src/shared/MediCore.Contracts/"]
 
-RUN dotnet restore "src/services/appointment/MediCore.Appointment.Api/Api.csproj"
+COPY infra/docker/restore-with-retry.sh /usr/local/bin/restore-with-retry.sh
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    sh /usr/local/bin/restore-with-retry.sh "src/services/appointment/MediCore.Appointment.Api/Api.csproj"
 
 # Copy source and build
 COPY src/services/appointment/ src/services/appointment/
 COPY src/shared/               src/shared/
 
 WORKDIR "/src/src/services/appointment/MediCore.Appointment.Api"
-RUN dotnet build "Api.csproj" --configuration Release --no-restore
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet build "Api.csproj" --configuration Release --no-restore
 
 # ── Stage 2: Test ─────────────────────────────────────────────────────────────
 # The test project is currently empty — QA owns the tests for this service — so
@@ -41,11 +44,13 @@ FROM build AS test
 WORKDIR /src
 
 COPY ["src/services/appointment/MediCore.Appointment.Tests/Tests.csproj", "src/services/appointment/MediCore.Appointment.Tests/"]
-RUN dotnet restore "src/services/appointment/MediCore.Appointment.Tests/Tests.csproj"
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    sh /usr/local/bin/restore-with-retry.sh "src/services/appointment/MediCore.Appointment.Tests/Tests.csproj"
 
 COPY src/services/appointment/MediCore.Appointment.Tests/ src/services/appointment/MediCore.Appointment.Tests/
 
-RUN dotnet test "src/services/appointment/MediCore.Appointment.Tests/Tests.csproj" \
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet test "src/services/appointment/MediCore.Appointment.Tests/Tests.csproj" \
     --configuration Release \
     --no-restore \
     --logger "console;verbosity=normal"
@@ -53,7 +58,8 @@ RUN dotnet test "src/services/appointment/MediCore.Appointment.Tests/Tests.cspro
 # ── Stage 3: Publish ──────────────────────────────────────────────────────────
 FROM build AS publish
 WORKDIR "/src/src/services/appointment/MediCore.Appointment.Api"
-RUN dotnet publish "Api.csproj" \
+RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet publish "Api.csproj" \
     --configuration Release \
     --no-build \
     --output /app/publish \

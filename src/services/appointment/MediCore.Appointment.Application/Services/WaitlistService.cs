@@ -95,7 +95,8 @@ public sealed class WaitlistService : IWaitlistService
             return new WaitlistBeyondHorizonResult(horizonDays);
         }
 
-        if (await _doctorRepository.GetActiveAsync(doctorId, cancellationToken) is null)
+        var doctor = await _doctorRepository.GetActiveAsync(doctorId, cancellationToken);
+        if (doctor is null)
         {
             return new WaitlistDoctorNotFoundResult();
         }
@@ -142,7 +143,7 @@ public sealed class WaitlistService : IWaitlistService
             PatientId = patientId,
             PatientNumber = patientDetails?.PatientNumber,
             PatientName = patientDetails?.PatientName,
-            ServiceCode = serviceCode ?? ServiceCodes.GeneralConsultation,
+            ServiceCode = ServiceCodes.ResolveForDoctor(doctor.Specialization, serviceCode),
             Position = await _waitlistRepository.GetNextPositionAsync(doctorId, date, cancellationToken),
             Status = WaitlistStatus.Waiting,
             JoinedAtUtc = nowUtc,

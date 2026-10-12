@@ -89,7 +89,8 @@ public sealed class WaitlistChangeService : IWaitlistChangeService
             return new WaitlistOfferExpiredResult(entry.OfferExpiresAtUtc ?? nowUtc);
         }
 
-        if (await _doctorRepository.GetActiveAsync(entry.DoctorId, cancellationToken) is null)
+        var doctor = await _doctorRepository.GetActiveAsync(entry.DoctorId, cancellationToken);
+        if (doctor is null)
         {
             return new WaitlistOfferDoctorNotFoundResult();
         }
@@ -125,7 +126,8 @@ public sealed class WaitlistChangeService : IWaitlistChangeService
             _appointmentRepository,
             _outboxRepository,
             _historyRepository,
-            cancellationToken);
+            cancellationToken,
+            doctor.DepartmentId);
 
         entry.Status = WaitlistStatus.Accepted;
         entry.AppointmentId = appointment.AppointmentId;
