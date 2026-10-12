@@ -38,7 +38,7 @@ public sealed class WaitlistChangeServiceTests
         Assert.Equal(PatientId, appointment.PatientId);
         Assert.Equal(fixture.Slot.SlotId, appointment.SlotId);
         Assert.Equal(Start, appointment.StartUtc);
-        Assert.Equal(ServiceCodes.FollowUp, appointment.ServiceCode);
+        Assert.Equal(ServiceCodes.GeneralConsultation, appointment.ServiceCode);
         Assert.Equal(AppointmentStatus.Booked, appointment.Status);
         Assert.Equal(SlotStatus.Booked, fixture.Slot.Status);
 
@@ -51,6 +51,20 @@ public sealed class WaitlistChangeServiceTests
         Assert.Equal(AppointmentHistoryAction.Booked, Assert.Single(fixture.History.Added).Action);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
         Assert.Equal(1, fixture.UnitOfWork.Commits);
+    }
+
+    [Fact]
+    public async Task The_appointment_is_coded_from_the_doctor_as_they_are_now_not_from_the_entry()
+    {
+        // An entry written while follow-ups could still be booked, for a doctor who has since
+        // taken a specialization. Billing prices neither the old code nor the old classification.
+        var fixture = new Fixture();
+        fixture.Entry.ServiceCode = "FOLLOW-UP";
+        fixture.Doctors.Specialization = "Neurology";
+
+        await fixture.Service.AcceptAsync(fixture.Entry.WaitlistEntryId, Patient, "corr-1");
+
+        Assert.Equal("SPEC-NEUROLOGY", Assert.Single(fixture.Appointments.Added).ServiceCode);
     }
 
     [Fact]
@@ -394,7 +408,7 @@ public sealed class WaitlistChangeServiceTests
                 PatientId = PatientId,
                 PatientNumber = "PAT-000042",
                 PatientName = "Nimal Perera",
-                ServiceCode = ServiceCodes.FollowUp,
+                ServiceCode = ServiceCodes.GeneralConsultation,
                 Position = 3,
                 Status = WaitlistStatus.Offered,
                 OfferedSlotId = Slot.SlotId,
@@ -643,10 +657,11 @@ public sealed class WaitlistChangeServiceTests
     private sealed class FakeDoctorRepository : IDoctorCacheRepository
     {
         public HashSet<Guid> Active { get; } = [];
+        public string Specialization { get; set; } = string.Empty;
 
         public Task<DoctorCache?> GetActiveAsync(Guid doctorId, CancellationToken cancellationToken = default) =>
             Task.FromResult(Active.Contains(doctorId)
-                ? new DoctorCache { DoctorId = doctorId, IsActive = true }
+                ? new DoctorCache { DoctorId = doctorId, IsActive = true, Specialization = Specialization }
                 : null);
 
         public Task<DoctorCache?> GetTrackedByDoctorIdAsync(Guid doctorId, CancellationToken cancellationToken = default) =>

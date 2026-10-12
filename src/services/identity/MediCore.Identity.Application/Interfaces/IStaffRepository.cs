@@ -37,6 +37,18 @@ public interface IStaffRepository
     Task<bool> DeactivateStaffAsync(Guid staffId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Replaces a staff member's password hash and, in the same save, revokes every refresh token
+    /// they hold, so a session opened with the old password cannot renew itself.
+    /// </summary>
+    /// <param name="changedByIp">Recorded on the revoked tokens, as logout and rotation record it.</param>
+    /// <returns>False when there is no such staff member.</returns>
+    Task<bool> ChangePasswordAsync(
+        Guid staffId,
+        string passwordHash,
+        string changedByIp,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Queues a staff.updated outbox row for every doctor, for consumers backfilling their cache.
     /// </summary>
     /// <returns>The number of events queued.</returns>

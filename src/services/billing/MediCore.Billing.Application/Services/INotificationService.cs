@@ -9,6 +9,7 @@ public interface INotificationService
     Task<NotificationDeliveryResult> HandlePatientRegisteredAsync(PatientRegisteredEvent integrationEvent, CancellationToken cancellationToken = default);
     Task<NotificationDeliveryResult> HandleAppointmentBookedAsync(AppointmentBookedEvent integrationEvent, CancellationToken cancellationToken = default);
     Task<NotificationDeliveryResult> HandleInvoicePaidAsync(InvoicePaidEvent integrationEvent, CancellationToken cancellationToken = default);
+    Task<NotificationDeliveryResult> HandleInvoicePartiallyPaidAsync(InvoicePartiallyPaidEvent integrationEvent, CancellationToken cancellationToken = default);
 }
 
 public enum NotificationDeliveryResult

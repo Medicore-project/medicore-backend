@@ -32,13 +32,13 @@ public sealed class WaitlistControllerTests
         var waitlist = new StubWaitlistService();
 
         var result = await PatientController(waitlist).Join(
-            new JoinWaitlistRequest(DoctorId, Day, BodyPatientId, ServiceCodes.FollowUp), CancellationToken.None);
+            new JoinWaitlistRequest(DoctorId, Day, BodyPatientId, ServiceCodes.SpecialistConsultation), CancellationToken.None);
 
         var join = Assert.Single(waitlist.Joins);
         Assert.Equal(PatientId, join.PatientId);
         Assert.Equal(DoctorId, join.DoctorId);
         Assert.Equal(Day, join.Date);
-        Assert.Equal(ServiceCodes.FollowUp, join.ServiceCode);
+        Assert.Equal(ServiceCodes.SpecialistConsultation, join.ServiceCode);
         Assert.Equal(new BookingPatientDetails("PAT-000042", "Nimal Perera"), join.Details);
 
         // The patient's reduced view: no patient or slot ids.

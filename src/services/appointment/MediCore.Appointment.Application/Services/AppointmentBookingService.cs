@@ -74,8 +74,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             try
             {
                 var result = await _unitOfWork.ExecuteInTransactionAsync(
-                    token => AttemptAsync(
-                        slotId, patientId, serviceCode, actor, correlationId, patientDetails, token),
+                    token => AttemptAsync(slotId, patientId, actor, correlationId, patientDetails, token),
                     cancellationToken);
 
                 // A retry that now finds the slot Booked is the loser of the race it was retrying,
@@ -111,7 +110,6 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
     private async Task<BookingResult> AttemptAsync(
         Guid slotId,
         Guid patientId,
-        string? serviceCode,
         string actor,
         string correlationId,
         BookingPatientDetails? patientDetails,
@@ -167,7 +165,7 @@ public sealed class AppointmentBookingService : IAppointmentBookingService
             slot,
             patientId,
             patientDetails,
-            ServiceCodes.ResolveForDoctor(doctor.Specialization, serviceCode),
+            ServiceCodes.ResolveForDoctor(doctor.Specialization),
             actor,
             correlationId,
             nowUtc,

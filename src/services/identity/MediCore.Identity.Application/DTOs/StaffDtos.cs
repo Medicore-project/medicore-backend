@@ -20,6 +20,13 @@ public record UpdateStaffRequest(
     [Required] Guid DepartmentId,
     bool IsActive);
 
+/// <summary>
+/// An Admin setting a staff member's password for them. There is no old password to confirm: the
+/// person asking is not the account's owner, and usually the owner has forgotten it.
+/// </summary>
+public record ChangeStaffPasswordRequest(
+    [Required][StringLength(100, MinimumLength = 8)] string NewPassword);
+
 public record StaffResponse(
     Guid Id,
     Guid UserId,

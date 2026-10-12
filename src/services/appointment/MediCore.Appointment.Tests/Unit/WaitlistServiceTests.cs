@@ -92,26 +92,26 @@ public sealed class WaitlistServiceTests
     }
 
     [Fact]
-    public async Task The_chosen_service_code_is_kept_for_the_appointment_an_offer_creates()
+    public async Task A_general_doctors_entry_is_a_general_consultation_whatever_the_caller_asks_for()
     {
         var fixture = new Fixture();
 
-        await fixture.JoinAsync(serviceCode: ServiceCodes.FollowUp);
+        await fixture.JoinAsync(serviceCode: "SPEC-NEUROLOGY");
 
-        Assert.Equal(ServiceCodes.FollowUp, Assert.Single(fixture.Waitlist.Added).ServiceCode);
+        Assert.Equal(
+            ServiceCodes.GeneralConsultation,
+            Assert.Single(fixture.Waitlist.Added).ServiceCode);
     }
 
     [Fact]
-    public async Task A_specialist_waitlist_entry_uses_the_server_resolved_service_code()
+    public async Task A_specialist_waitlist_entry_uses_the_code_of_the_doctors_specialization()
     {
         var fixture = new Fixture();
         fixture.Doctors.Specialization = "Neurology";
 
         await fixture.JoinAsync(serviceCode: ServiceCodes.GeneralConsultation);
 
-        Assert.Equal(
-            ServiceCodes.SpecialistConsultation,
-            Assert.Single(fixture.Waitlist.Added).ServiceCode);
+        Assert.Equal("SPEC-NEUROLOGY", Assert.Single(fixture.Waitlist.Added).ServiceCode);
     }
 
     [Fact]

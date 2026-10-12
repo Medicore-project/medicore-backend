@@ -276,10 +276,10 @@ foreach ($seed in $scheduleSeeds) {
 }
 
 # Create three future bookings. Using patient booking tokens keeps names and patient numbers on
-# the appointment events and gives SCRUM-42 realistic draft invoices.
+# the appointment events and gives SCRUM-42 realistic draft invoices. No service code is sent: the
+# appointment service derives it from each doctor's specialization.
 $toDate = (Get-Date).AddDays(59).ToString("yyyy-MM-dd")
 $existingAppointments = @(Invoke-MediCoreApi -Method Get -Path "/appointment/api/appointments?from=$today&to=$toDate" -Token $adminToken)
-$serviceCodes = @("GEN-CONSULT", "SPEC-CONSULT", "FOLLOW-UP")
 $bookings = @()
 
 for ($index = 0; $index -lt 3; $index++) {
@@ -310,11 +310,10 @@ for ($index = 0; $index -lt 3; $index++) {
     $appointment = Invoke-MediCoreApi -Method Post -Path "/appointment/api/appointments" -Token $bookingIdentity.bookingToken -Body @{
         slotId = $slot.slotId
         patientId = $patient.PatientId
-        serviceCode = $serviceCodes[$index]
     }
     $bookings += $appointment
     $existingAppointments += $appointment
-    Write-Host "Booked $($serviceCodes[$index]) for $($patient.FullName)"
+    Write-Host "Booked $($appointment.serviceCode) for $($patient.FullName)"
 }
 
 # Wait briefly for Billing to consume the appointment.booked events.

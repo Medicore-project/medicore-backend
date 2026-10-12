@@ -72,6 +72,7 @@ public sealed class IdentityAuthorizationPolicyTests
     [InlineData(nameof(StaffController.Create))]
     [InlineData(nameof(StaffController.Update))]
     [InlineData(nameof(StaffController.Delete))]
+    [InlineData(nameof(StaffController.ChangePassword))]
     [InlineData(nameof(StaffController.RepublishDoctors))]
     [InlineData(nameof(StaffController.AssignRole))]
     public void Staff_write_endpoints_remain_admin_only(string methodName)

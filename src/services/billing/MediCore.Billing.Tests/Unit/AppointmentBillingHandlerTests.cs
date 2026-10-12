@@ -68,6 +68,68 @@ public sealed class AppointmentBillingHandlerTests
     }
 
     [Fact]
+    public async Task Booked_for_a_specialization_uses_that_specializations_own_tariff()
+    {
+        var fixture = new Fixture();
+        fixture.Tariffs.Result = Tariff("SPEC-CARDIOLOGY", 7500m);
+
+        var result = await fixture.Handler.HandleBookedAsync(Booked(serviceCode: "SPEC-CARDIOLOGY"));
+
+        Assert.Equal(AppointmentBillingResult.Processed, result);
+        var invoice = Assert.Single(fixture.Invoices.Added);
+        Assert.Equal("SPEC-CARDIOLOGY", invoice.ServiceCode);
+        Assert.Equal(7500m, invoice.Total);
+        Assert.Equal(new[] { "SPEC-CARDIOLOGY" }, fixture.Tariffs.LookedUp);
+    }
+
+    [Fact]
+    public async Task Booked_for_a_specialization_without_a_tariff_is_priced_at_the_default_specialist_tariff()
+    {
+        var fixture = new Fixture();
+        fixture.Tariffs.Result = Tariff(AppointmentBillingHandler.DefaultSpecialistServiceCode, 5000m);
+
+        var result = await fixture.Handler.HandleBookedAsync(Booked(serviceCode: "SPEC-NEUROLOGY"));
+
+        Assert.Equal(AppointmentBillingResult.Processed, result);
+        var invoice = Assert.Single(fixture.Invoices.Added);
+        // The invoice still says which specialization it was for; only the price is borrowed.
+        Assert.Equal("SPEC-NEUROLOGY", invoice.ServiceCode);
+        Assert.Equal(5000m, invoice.Total);
+        Assert.False(invoice.RequiresManualPricing);
+        Assert.Null(invoice.PricingIssue);
+        var line = Assert.Single(invoice.Lines);
+        Assert.Equal("SPEC-NEUROLOGY", line.ServiceCode);
+        Assert.Equal(fixture.Tariffs.Result.TariffId, line.TariffId);
+        Assert.Equal(new[] { "SPEC-NEUROLOGY", "SPEC-CONSULT" }, fixture.Tariffs.LookedUp);
+    }
+
+    [Fact]
+    public async Task Booked_for_a_specialization_with_no_tariff_and_no_default_requires_manual_pricing()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Handler.HandleBookedAsync(Booked(serviceCode: "SPEC-NEUROLOGY"));
+
+        Assert.Equal(AppointmentBillingResult.MissingTariff, result);
+        var invoice = Assert.Single(fixture.Invoices.Added);
+        Assert.True(invoice.RequiresManualPricing);
+        Assert.Contains("SPEC-NEUROLOGY", invoice.PricingIssue);
+    }
+
+    [Fact]
+    public async Task Booked_general_consultation_is_never_priced_at_the_specialist_tariff()
+    {
+        var fixture = new Fixture();
+        fixture.Tariffs.Result = Tariff(AppointmentBillingHandler.DefaultSpecialistServiceCode, 5000m);
+
+        var result = await fixture.Handler.HandleBookedAsync(Booked());
+
+        Assert.Equal(AppointmentBillingResult.MissingTariff, result);
+        Assert.Equal(0m, Assert.Single(fixture.Invoices.Added).Total);
+        Assert.Equal(new[] { "GEN-CONSULT" }, fixture.Tariffs.LookedUp);
+    }
+
+    [Fact]
     public async Task Duplicate_message_is_checked_before_invoice_or_tariff_access()
     {
         var fixture = new Fixture();
@@ -247,6 +309,16 @@ public sealed class AppointmentBillingHandlerTests
 
     private static readonly Guid AppointmentId = Guid.Parse("de39865f-795c-4b52-823d-7df4e8c4f842");
 
+    private static ServiceTariff Tariff(string serviceCode, decimal unitPrice) => new()
+    {
+        TariffId = Guid.NewGuid(),
+        ServiceCode = serviceCode,
+        Description = $"{serviceCode} consultation",
+        UnitPrice = unitPrice,
+        Currency = "LKR",
+        EffectiveFromUtc = NowUtc.AddYears(-1)
+    };
+
     private static Invoice Invoice() => new()
     {
         AppointmentId = AppointmentId,
@@ -311,7 +383,8 @@ public sealed class AppointmentBillingHandlerTests
     private sealed class FakeTariffRepository : IServiceTariffRepository
     {
         public ServiceTariff? Result { get; set; }
-        public int LookupCalls { get; private set; }
+        public List<string> LookedUp { get; } = [];
+        public int LookupCalls => LookedUp.Count;
 
         public Task<IReadOnlyList<ServiceTariff>> GetAllAsync(
             bool includeInactive,
@@ -339,8 +412,8 @@ public sealed class AppointmentBillingHandlerTests
             DateTime effectiveAtUtc,
             CancellationToken cancellationToken = default)
         {
-            LookupCalls++;
-            return Task.FromResult(Result);
+            LookedUp.Add(serviceCode);
+            return Task.FromResult(Result?.ServiceCode == serviceCode ? Result : null);
         }
 
         public Task AddAsync(

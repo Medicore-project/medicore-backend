@@ -10,9 +10,9 @@ namespace MediCore.Appointment.Application.DTOs;
 /// ever supply this.
 /// </param>
 /// <param name="ServiceCode">
-/// Optional workflow hint. General versus specialist consultation is always derived from the
-/// selected doctor's cached specialization; callers cannot override it. <c>FOLLOW-UP</c> remains
-/// explicit until follow-up eligibility has its own workflow.
+/// Optional, and without effect: the service code is always derived from the selected doctor's
+/// cached specialization, and callers cannot override it. It is still validated, so a malformed
+/// or retired code is refused rather than silently replaced.
 /// </param>
 public sealed record BookAppointmentRequest(Guid SlotId, Guid PatientId, string? ServiceCode);
 

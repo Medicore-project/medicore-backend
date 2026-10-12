@@ -41,6 +41,8 @@ public sealed class NotificationEventProcessor : INotificationEventProcessor
                 Deserialize<AppointmentBookedEvent>(payload), cancellationToken),
             "invoice.paid" => await _notifications.HandleInvoicePaidAsync(
                 Deserialize<InvoicePaidEvent>(payload), cancellationToken),
+            "invoice.partially-paid" => await _notifications.HandleInvoicePartiallyPaidAsync(
+                Deserialize<InvoicePartiallyPaidEvent>(payload), cancellationToken),
             _ => null
         };
 
