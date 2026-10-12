@@ -334,7 +334,7 @@ jobs:
           echo "Sleeping 90s for container cold-start..."
           sleep 90
 
-          MAX_ATTEMPTS=24   # 24 × 10 s = 4 minutes
+          MAX_ATTEMPTS=48   # 48 × 10 s = 8 minutes; a release restarts all five apps on one B1 plan
           for i in $(seq 1 $MAX_ATTEMPTS); do
             # Capture http_code separately to avoid the double-000 bug:
             # curl writes %{http_code} to stdout AND exits non-zero on
