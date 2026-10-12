@@ -10,9 +10,8 @@
 #                         passed as --command-config     (default: none)
 #   TOPIC_RETENTION_MS    retention for new topics       (default 7 days)
 #
-# Production does not use this script: it runs on Azure Event Hubs, which
-# caps a Standard namespace at 10 topics. See
-# docs/evidence/sprint-4/152-eventhubs-topics.md.
+# Also used in production: the Kafka VM's kafka-init container runs this same
+# script against its INTERNAL listener (see infra/azure/kafka-vm/).
 # =============================================================================
 set -euo pipefail
 
