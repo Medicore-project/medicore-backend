@@ -100,7 +100,7 @@ public sealed class AppointmentBookingServiceTests
     // ── AC4: the event carries the service code for billing ──────────────────
 
     [Fact]
-    public async Task A_specialist_booking_announces_the_server_resolved_service_code_for_billing()
+    public async Task A_specialist_booking_announces_the_code_of_the_doctors_specialization_for_billing()
     {
         var fixture = new Fixture(FreeSlot());
         fixture.Doctors.Specialization = "Neurology";
@@ -115,7 +115,7 @@ public sealed class AppointmentBookingServiceTests
 
         var published = JsonSerializer.Deserialize<AppointmentBookedEvent>(
             row.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
-        Assert.Equal(ServiceCodes.SpecialistConsultation, published.ServiceCode);
+        Assert.Equal("SPEC-NEUROLOGY", published.ServiceCode);
         Assert.Equal(PatientId, published.PatientId);
         Assert.Equal(DoctorId, published.DoctorId);
         Assert.Equal(SlotStart, published.SlotStart);

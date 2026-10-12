@@ -28,7 +28,7 @@ public sealed class AppointmentValidatorTests
     [Theory]
     [InlineData(ServiceCodes.GeneralConsultation)]
     [InlineData(ServiceCodes.SpecialistConsultation)]
-    [InlineData(ServiceCodes.FollowUp)]
+    [InlineData("SPEC-CARDIOLOGY")]
     public void Every_known_service_code_is_accepted(string code)
     {
         var result = _validator.Validate(new BookAppointmentRequest(Guid.NewGuid(), Guid.NewGuid(), code));
@@ -40,6 +40,8 @@ public sealed class AppointmentValidatorTests
     [InlineData("NOPE")]
     [InlineData("")]
     [InlineData("gen-consult")]
+    // Retired with the follow-up option: refused outright, not quietly booked as something else.
+    [InlineData("FOLLOW-UP")]
     public void An_unknown_service_code_is_refused_and_the_list_is_offered(string code)
     {
         var result = _validator.Validate(new BookAppointmentRequest(Guid.NewGuid(), Guid.NewGuid(), code));

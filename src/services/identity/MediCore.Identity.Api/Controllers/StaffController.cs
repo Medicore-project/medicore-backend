@@ -29,19 +29,22 @@ public class StaffController : ControllerBase
     private readonly IRoleRepository _roleRepository;
     private readonly IValidator<CreateStaffRequest> _createValidator;
     private readonly IValidator<UpdateStaffRequest> _updateValidator;
+    private readonly IValidator<ChangeStaffPasswordRequest> _changePasswordValidator;
 
     public StaffController(
         IStaffRepository staffRepository,
         IPasswordHasher passwordHasher,
         IRoleRepository roleRepository,
         IValidator<CreateStaffRequest> createValidator,
-        IValidator<UpdateStaffRequest> updateValidator)
+        IValidator<UpdateStaffRequest> updateValidator,
+        IValidator<ChangeStaffPasswordRequest> changePasswordValidator)
     {
         _staffRepository = staffRepository;
         _passwordHasher = passwordHasher;
         _roleRepository = roleRepository;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
+        _changePasswordValidator = changePasswordValidator;
     }
 
     [HttpGet]
@@ -118,6 +121,43 @@ public class StaffController : ControllerBase
     {
         var deactivated = await _staffRepository.DeactivateStaffAsync(id, cancellationToken);
         if (!deactivated)
+            return NotFound();
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Sets a new password for a staff member — for one who has forgotten theirs, or whose
+    /// password may be known to someone else.
+    /// </summary>
+    /// <remarks>
+    /// Admin's alone, and it asks for no old password: this is a reset by someone else, not a
+    /// change by the account's owner. The staff member's refresh tokens are revoked with it, so
+    /// they are signed out everywhere once their current access token (15 minutes at most) runs
+    /// out, and sign in again with the new password. The password itself is hashed before it
+    /// leaves this action and is never logged; the audit entry records only who changed whose.
+    /// </remarks>
+    [HttpPut("{id:guid}/password")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ChangePassword(
+        Guid id,
+        [FromBody] ChangeStaffPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = await _changePasswordValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+            return BadRequest(validation.Errors.Select(e => e.ErrorMessage));
+
+        var passwordHash = _passwordHasher.HashPassword(request.NewPassword);
+        var changedByIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        var changed = await _staffRepository.ChangePasswordAsync(id, passwordHash, changedByIp, cancellationToken);
+        if (!changed)
             return NotFound();
 
         return NoContent();

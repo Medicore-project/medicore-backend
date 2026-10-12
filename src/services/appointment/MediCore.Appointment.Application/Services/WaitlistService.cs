@@ -53,8 +53,7 @@ public sealed class WaitlistService : IWaitlistService
             try
             {
                 return await _unitOfWork.ExecuteInTransactionAsync(
-                    token => AttemptJoinAsync(
-                        doctorId, date, patientId, patientDetails, serviceCode, actor, token),
+                    token => AttemptJoinAsync(doctorId, date, patientId, patientDetails, actor, token),
                     cancellationToken);
             }
             catch (DuplicateWaitlistEntryException)
@@ -77,7 +76,6 @@ public sealed class WaitlistService : IWaitlistService
         DateOnly date,
         Guid patientId,
         BookingPatientDetails? patientDetails,
-        string? serviceCode,
         string actor,
         CancellationToken cancellationToken)
     {
@@ -143,7 +141,7 @@ public sealed class WaitlistService : IWaitlistService
             PatientId = patientId,
             PatientNumber = patientDetails?.PatientNumber,
             PatientName = patientDetails?.PatientName,
-            ServiceCode = ServiceCodes.ResolveForDoctor(doctor.Specialization, serviceCode),
+            ServiceCode = ServiceCodes.ResolveForDoctor(doctor.Specialization),
             Position = await _waitlistRepository.GetNextPositionAsync(doctorId, date, cancellationToken),
             Status = WaitlistStatus.Waiting,
             JoinedAtUtc = nowUtc,

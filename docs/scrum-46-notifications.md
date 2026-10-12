@@ -1,14 +1,17 @@
 # SCRUM-46: Email notifications
 
-Billing sends three event-driven emails through the configured SMTP server (MailHog in Docker Compose):
+Billing sends four event-driven emails through the configured SMTP server (MailHog in Docker Compose):
 
 | Event | Template code | Available placeholders |
 |---|---|---|
 | `patient.registered` | `PATIENT_WELCOME` | `{{patientName}}`, `{{patientId}}` |
 | `appointment.booked` | `APPOINTMENT_CONFIRMATION` | `{{patientName}}`, `{{appointmentId}}`, `{{doctorId}}`, `{{slotStart}}`, `{{serviceCode}}` |
 | `invoice.paid` | `PAYMENT_RECEIPT` | `{{patientName}}`, `{{invoiceId}}`, `{{amount}}`, `{{method}}` |
+| `invoice.partially-paid` | `PARTIAL_PAYMENT_RECEIPT` | `{{patientName}}`, `{{invoiceId}}`, `{{invoiceNumber}}`, `{{amount}}`, `{{method}}`, `{{totalPaid}}`, `{{balanceDue}}`, `{{currency}}` |
 
-The three default templates are seeded by the Billing migration. An Admin can manage templates at `/billing/notifications` or through `GET/POST/PUT/DELETE /billing/api/notification-templates`. The same page displays recent delivery attempts from `GET /billing/api/notifications`.
+Every payment is receipted exactly once. A payment that leaves a balance publishes `invoice.partially-paid`, where `{{amount}}` is that payment alone; the payment that settles the invoice publishes `invoice.paid` instead, where `{{amount}}` is the invoice total. Both go to `billing-events`, keyed by invoice id, and are consumed only by Billing's own notification consumer.
+
+The default templates are seeded by the Billing migrations. An Admin can manage templates at `/billing/notifications` or through `GET/POST/PUT/DELETE /billing/api/notification-templates`. The same page displays recent delivery attempts from `GET /billing/api/notifications`.
 
 The appointment and payment event contracts contain a patient ID but no email address. Billing therefore keeps a local contact cache from `patient.registered` events; it never reads the Patient database. If a contact is unavailable when a booking or payment event arrives, delivery is retried. Patients whose registration event has expired from Kafka retention need a new registration event or a future contact-sync workflow before they can receive these emails.
 

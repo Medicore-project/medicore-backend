@@ -31,8 +31,42 @@ public sealed class PaymentServiceTests
         var payment = Assert.Single(recorded.Invoice.Payments);
         Assert.Equal(PaymentMethods.Cash, payment.Method);
         Assert.Equal("reception@medicore.lk", payment.RecordedBy);
-        Assert.Empty(fixture.Outbox.Added);
         Assert.Equal(1, fixture.UnitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task Partial_payment_writes_a_partially_paid_outbox_event_so_it_is_receipted_too()
+    {
+        var invoice = Invoice();
+        invoice.AmountPaid = 250m;
+        var fixture = new Fixture(invoice);
+
+        await fixture.Service.RecordAsync(
+            invoice.InvoiceId,
+            new RecordPaymentRequest(400m, "Card"),
+            "reception@medicore.lk",
+            "corr-part");
+
+        // One event, and not invoice.paid: the invoice is still owed on.
+        var outbox = Assert.Single(fixture.Outbox.Added);
+        Assert.Equal("billing-events", outbox.Topic);
+        Assert.Equal(invoice.InvoiceId.ToString(), outbox.EventKey);
+        Assert.Equal("invoice.partially-paid", outbox.EventType);
+        Assert.Equal("corr-part", outbox.CorrelationId);
+        var partEvent = JsonSerializer.Deserialize<InvoicePartiallyPaidEvent>(
+            outbox.Payload,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(partEvent);
+        Assert.Equal(outbox.MessageId, partEvent.MessageId);
+        Assert.Equal(invoice.InvoiceId, partEvent.InvoiceId);
+        Assert.Equal("INV-20261006-TEST0001", partEvent.InvoiceNumber);
+        Assert.Equal(invoice.PatientId, partEvent.PatientId);
+        // This payment alone, then where the invoice stands after it.
+        Assert.Equal(400m, partEvent.Amount);
+        Assert.Equal(PaymentMethods.Card, partEvent.Method);
+        Assert.Equal(650m, partEvent.TotalPaid);
+        Assert.Equal(350m, partEvent.BalanceDue);
+        Assert.Equal("LKR", partEvent.Currency);
     }
 
     [Fact]
@@ -63,6 +97,7 @@ public sealed class PaymentServiceTests
         Assert.Equal(NowUtc, recorded.Invoice.PaidAtUtc);
         Assert.Equal(2, recorded.Invoice.Payments.Count);
 
+        // Exactly one event: the payment that settles the invoice is not also "partially paid".
         var outbox = Assert.Single(fixture.Outbox.Added);
         Assert.Equal("billing-events", outbox.Topic);
         Assert.Equal(invoice.InvoiceId.ToString(), outbox.EventKey);

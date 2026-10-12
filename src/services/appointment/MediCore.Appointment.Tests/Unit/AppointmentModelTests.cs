@@ -185,11 +185,11 @@ public sealed class AppointmentModelTests
     [Theory]
     [InlineData(ServiceCodes.GeneralConsultation)]
     [InlineData(ServiceCodes.SpecialistConsultation)]
-    [InlineData(ServiceCodes.FollowUp)]
-    public void Every_listed_service_code_is_known(string code)
+    [InlineData("SPEC-CARDIOLOGY")]
+    [InlineData("SPEC-EAR-NOSE-THROAT")]
+    public void The_general_code_and_every_specialization_code_are_known(string code)
     {
         Assert.True(ServiceCodes.IsKnown(code));
-        Assert.Contains(code, ServiceCodes.All);
     }
 
     [Theory]
@@ -200,9 +200,62 @@ public sealed class AppointmentModelTests
     // Case-sensitive on purpose: the code is stored and published verbatim, so accepting a second
     // spelling would put two names for one service on the topic.
     [InlineData("gen-consult")]
-    public void Anything_not_on_the_list_is_unknown(string? code)
+    [InlineData("spec-cardiology")]
+    // Retired: a return visit is booked and priced as any other visit to that doctor.
+    [InlineData("FOLLOW-UP")]
+    // Not what a specialization name can produce.
+    [InlineData("SPEC-")]
+    [InlineData("SPEC--CARDIOLOGY")]
+    [InlineData("SPEC-CARDIOLOGY-")]
+    [InlineData("SPEC-EAR NOSE")]
+    public void Anything_else_is_unknown(string? code)
     {
         Assert.False(ServiceCodes.IsKnown(code));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void A_doctor_with_no_specialization_is_a_general_consultation(string? specialization)
+    {
+        Assert.Equal(ServiceCodes.GeneralConsultation, ServiceCodes.ResolveForDoctor(specialization));
+    }
+
+    [Theory]
+    [InlineData("Cardiology", "SPEC-CARDIOLOGY")]
+    // Free text in Identity, so the same specialization arrives spelt several ways.
+    [InlineData("  cardiology ", "SPEC-CARDIOLOGY")]
+    [InlineData("Ear, Nose & Throat", "SPEC-EAR-NOSE-THROAT")]
+    [InlineData("General Medicine", "SPEC-GENERAL-MEDICINE")]
+    // Nothing usable in the name: still a specialist, at the default specialist code.
+    [InlineData("???", ServiceCodes.SpecialistConsultation)]
+    public void Each_specialization_has_its_own_code_however_it_is_spelt(string specialization, string expected)
+    {
+        var code = ServiceCodes.ResolveForDoctor(specialization);
+
+        Assert.Equal(expected, code);
+        Assert.True(ServiceCodes.IsKnown(code));
+    }
+
+    [Fact]
+    public void A_long_specialization_is_cut_to_the_service_code_column()
+    {
+        var code = ServiceCodes.ResolveForDoctor(new string('a', 100));
+
+        Assert.Equal("SPEC-" + new string('A', 45), code);
+        Assert.Equal(ServiceCodes.MaxLength, code.Length);
+        Assert.True(ServiceCodes.IsKnown(code));
+    }
+
+    [Fact]
+    public void A_cut_that_lands_on_a_separator_does_not_leave_it_dangling()
+    {
+        // 44 letters, then the separator falls exactly on the 45th and last place.
+        var code = ServiceCodes.ResolveForDoctor(new string('a', 44) + " and more");
+
+        Assert.Equal("SPEC-" + new string('A', 44), code);
+        Assert.True(ServiceCodes.IsKnown(code));
     }
 
     private static AppointmentDbContext CreateContext() =>

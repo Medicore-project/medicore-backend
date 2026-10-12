@@ -205,7 +205,8 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                     b.HasData(
                         new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee01"), BodyTemplate = "Hello {{patientName}},\n\nYour MediCore patient profile is ready. Your patient reference is {{patientId}}.", Code = "PATIENT_WELCOME", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Patient welcome", SubjectTemplate = "Welcome to MediCore, {{patientName}}" },
                         new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee02"), BodyTemplate = "Hello {{patientName}},\n\nYour {{serviceCode}} appointment is confirmed for {{slotStart}}. Appointment reference: {{appointmentId}}.", Code = "APPOINTMENT_CONFIRMATION", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Appointment confirmation", SubjectTemplate = "MediCore appointment confirmed" },
-                        new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee03"), BodyTemplate = "Hello {{patientName}},\n\nWe received {{amount}} LKR by {{method}} for invoice {{invoiceId}}. Thank you.", Code = "PAYMENT_RECEIPT", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Payment receipt", SubjectTemplate = "MediCore payment receipt" });
+                        new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee03"), BodyTemplate = "Hello {{patientName}},\n\nWe received {{amount}} LKR by {{method}} for invoice {{invoiceId}}. Thank you.", Code = "PAYMENT_RECEIPT", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Payment receipt", SubjectTemplate = "MediCore payment receipt" },
+                        new { NotificationTemplateId = new Guid("9c5dcd4c-3cee-4fe6-a3d2-36c90cb0ee04"), BodyTemplate = "Hello {{patientName}},\n\nWe received {{amount}} {{currency}} by {{method}} towards invoice {{invoiceNumber}}. Paid so far: {{totalPaid}} {{currency}}. Balance still due: {{balanceDue}} {{currency}}.", Code = "PARTIAL_PAYMENT_RECEIPT", CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), IsActive = true, Name = "Partial payment receipt", SubjectTemplate = "MediCore payment received" });
                 });
 
             modelBuilder.Entity("MediCore.Billing.Application.Entities.OutboxMessage", b =>
@@ -429,7 +430,7 @@ namespace MediCore.Billing.Infrastructure.Persistence.Migrations
                             Currency = "LKR",
                             Description = "Follow-up consultation",
                             EffectiveFromUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
+                            IsActive = false,
                             ServiceCode = "FOLLOW-UP",
                             UnitPrice = 1500m
                         });

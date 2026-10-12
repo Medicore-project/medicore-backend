@@ -281,6 +281,39 @@ public class StaffRepository : IStaffRepository
         return true;
     }
 
+    public async Task<bool> ChangePasswordAsync(
+        Guid staffId,
+        string passwordHash,
+        string changedByIp,
+        CancellationToken cancellationToken = default)
+    {
+        var staff = await _context.StaffProfiles
+            .Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.Id == staffId, cancellationToken);
+
+        if (staff?.User == null)
+            return false;
+
+        staff.User.PasswordHash = passwordHash;
+
+        // A password is usually reset because it was forgotten or may be known to someone else.
+        // Either way, whoever is signed in with the old one must not be able to stay signed in.
+        var utcNow = DateTime.UtcNow;
+        var liveTokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == staff.UserId && rt.Revoked == null && rt.Expires > utcNow)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in liveTokens)
+        {
+            token.Revoked = utcNow;
+            token.RevokedByIp = changedByIp;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
     public async Task<int> QueueDoctorRepublishAsync(CancellationToken cancellationToken = default)
     {
         var doctors = await _context.StaffProfiles

@@ -22,7 +22,8 @@ public sealed class JoinWaitlistRequestValidator : AbstractValidator<JoinWaitlis
 
         RuleFor(r => r.ServiceCode)
             .Must(ServiceCodes.IsKnown)
-            .WithMessage($"Service code must be one of: {string.Join(", ", ServiceCodes.All)}.")
+            .WithMessage(
+                $"Service code must be {ServiceCodes.GeneralConsultation} or a specialization code such as SPEC-CARDIOLOGY.")
             .When(r => r.ServiceCode is not null);
     }
 }

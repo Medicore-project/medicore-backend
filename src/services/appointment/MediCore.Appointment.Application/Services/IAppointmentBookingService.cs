@@ -67,8 +67,9 @@ public interface IAppointmentBookingService
     /// request so that "whose appointment is this" is decided in exactly one place.
     /// </param>
     /// <param name="serviceCode">
-    /// A validated workflow hint. General versus specialist consultation is resolved from the
-    /// trusted doctor cache; only an explicit follow-up is preserved.
+    /// What the caller believes the booking is, already validated. It has no effect: the code is
+    /// always resolved from the trusted doctor cache, so a caller can never choose a cheaper
+    /// service than the doctor's own.
     /// </param>
     /// <param name="correlationId">Carried onto the outbox row and the Kafka header.</param>
     /// <param name="patientDetails">
