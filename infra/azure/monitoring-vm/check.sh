@@ -47,5 +47,12 @@ az vm run-command invoke -g "$RG" -n "$VM" --command-id RunShellScript \
 
 DOMAIN="${DOMAIN:-$(az network public-ip show -g "$RG" -n "$PIP" --query dnsSettings.fqdn -o tsv | tr -d '\r')}"
 echo "== https://$DOMAIN"
-curl -s -o /dev/null -m 30 -w "  /api/health → HTTP %{http_code}, TLS verify %{ssl_verify_result} (0 = valid)\n" \
-  "https://$DOMAIN/api/health" || echo "  unreachable"
+# curl verifies the certificate, so any status line here means TLS is valid.
+# The status comes from the headers, not -w: Git for Windows' curl 8.8
+# (Schannel) fails any -w on this host with error 43.
+status=$(curl -sS -m 30 -o /dev/null -D - "https://$DOMAIN/api/health" 2>/dev/null | head -n 1 | tr -d '\r' || true)
+if [[ -z "$status" ]]; then
+  echo "  /api/health -> no HTTPS response (on the first run, Caddy may still be getting the certificate)"
+else
+  echo "  /api/health -> $status, certificate valid"
+fi
