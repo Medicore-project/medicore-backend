@@ -25,7 +25,7 @@ medicore-plan (B1)                               medicore-vnet 10.20.0.0/16
 
 ## Security
 
-- **No public broker port.** The NSG admits 9092 only from the App Service integration subnet. Azure's default `DenyAllInBound` blocks everything else from the internet, SSH included.
+- **No public broker port.** The NSG admits 9092 only from the App Service integration subnet and, for kafka-exporter, the monitoring subnet `10.20.3.0/24` (rule `allow-kafka-from-monitoring`, added by `../monitoring-vm/provision.sh`). Azure's default `DenyAllInBound` blocks everything else from the internet, SSH included.
 - **No SSH.** The VM is managed with `az vm run-command`, which needs Azure RBAC on the VM and opens no port. An SSH key is generated at creation only because Azure requires one for Linux VMs.
 - **The public IP is for outbound only**: apt packages and the Docker Hub image pull. Nothing listens on it.
 - **PLAINTEXT on the private network.** Traffic between the apps and the broker stays inside the VNet. The services switch to SASL_SSL automatically if `Kafka__SaslUsername`/`Kafka__SaslPassword` are set, so adding TLS later is a broker-side change plus two settings, with no code change.
@@ -70,7 +70,8 @@ az vm run-command invoke -g medicore-rg -n medicore-kafka --command-id RunShellS
 
 The VM restarts the containers on boot (`restart: unless-stopped`, and Docker is enabled under systemd). Data lives in the `kafka-data` Docker volume on the VM's managed disk, so it survives restarts.
 
+Topic offsets, consumer lag and DLT depth are collected by kafka-exporter on the monitoring VM, and shown in production Grafana. See [`../monitoring-vm/`](../monitoring-vm/README.md).
+
 ## Limits (accepted)
 
 - **Single node** (replication factor 1). A VM outage pauses messaging. Producers keep working, because events wait in each service's outbox and publish when the broker returns. That's the behaviour the resilience demo shows locally.
-- **No broker metrics in production.** Prometheus and Grafana run in the local stack only.
