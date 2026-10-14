@@ -1,0 +1,21 @@
+# =============================================================================
+# MediCore — TLS front door for Grafana on the monitoring VM
+#
+# Caddy obtains and renews a Let's Encrypt certificate for $DOMAIN (the public
+# IP's Azure DNS name, e.g. medicore-monitoring.centralindia.cloudapp.azure.com)
+# and redirects HTTP to HTTPS. Only Grafana is published; Prometheus and
+# kafka-exporter stay on the internal Docker network.
+# =============================================================================
+
+{$DOMAIN} {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy grafana:3000
+}
