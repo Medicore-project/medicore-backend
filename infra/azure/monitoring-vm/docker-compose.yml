@@ -1,0 +1,99 @@
+# =============================================================================
+# MediCore — production monitoring stack on the Azure VM (medicore-monitoring)
+#
+#   caddy           :80/:443 public  → TLS for Grafana (Let's Encrypt)
+#   grafana         internal only    → the MediCore Overview dashboard
+#   prometheus      internal only    → scrapes the 5 App Service apps over HTTPS
+#                                      and kafka-exporter; evaluates the alert rules
+#   kafka-exporter  internal only    → reads 10.20.1.10:9092 over medicore-vnet
+#
+# Lives at /opt/medicore-monitoring on the VM. deploy.sh writes this file, the
+# prometheus/, grafana/ and caddy/ directories, and the .env file (DOMAIN,
+# KAFKA_BOOTSTRAP, and a generated GRAFANA_ADMIN_PASSWORD).
+#
+# Config is mounted as directories, not single files: deploy.sh replaces the
+# files inside them, and a single-file bind mount would keep pointing at the
+# old, deleted inode.
+# =============================================================================
+name: medicore-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: medicore-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.retention.size=8GB"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: medicore-kafka-exporter
+    restart: unless-stopped
+    command:
+      - "--kafka.server=${KAFKA_BOOTSTRAP:?set KAFKA_BOOTSTRAP in .env}"
+
+  grafana:
+    image: grafana/grafana-oss:11.3.1
+    container_name: medicore-grafana
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      # Applied only when Grafana first creates its database; after that the
+      # password lives in the grafana-data volume (README.md, "Grafana login").
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_SERVER_HTTP_PORT: 3000
+      GF_SERVER_DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      GF_SERVER_ROOT_URL: https://${DOMAIN}/
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  caddy:
+    image: caddy:2.8.4
+    container_name: medicore-caddy
+    restart: unless-stopped
+    depends_on:
+      - grafana
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy:/etc/caddy:ro
+      - caddy-data:/data        # certificates — kept so restarts don't re-issue
+      - caddy-config:/config
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  caddy-data:
+  caddy-config:

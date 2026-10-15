@@ -33,7 +33,10 @@ COPY src/services/appointment/ src/services/appointment/
 COPY src/shared/               src/shared/
 
 WORKDIR "/src/src/services/appointment/MediCore.Appointment.Api"
+
+# Restore dependencies after copying full source, then build
 RUN --mount=type=cache,id=medicore-nuget,target=/root/.nuget/packages,sharing=locked \
+    dotnet restore "Api.csproj" --force && \
     dotnet build "Api.csproj" --configuration Release --no-restore
 
 # ── Stage 2: Test ─────────────────────────────────────────────────────────────

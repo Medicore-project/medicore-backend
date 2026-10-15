@@ -5,20 +5,27 @@
 # Compose publishes), so every series exists once per `instance`.
 # `max without (instance)` collapses the copies before summing; a plain `sum`
 # would double the values.
+#
+# The DLT alert fires on *new* dead-letter messages, not on depth. A topic's
+# end offset never decreases, even after retention deletes the messages, so a
+# depth > 0 rule would stay firing forever after the first failure. This one
+# fires on the first evaluation after a message lands and resolves 15 minutes
+# after the last one. The dashboard's DLT panel still shows total depth. The
+# name is kept because the resilience demo and the SCRUM-179 evidence use it.
 # =============================================================================
 
 groups:
   - name: kafka-dlt-alerts
     rules:
       - alert: KafkaDeadLetterQueueNotEmpty
-        expr: sum by (topic) (max without (instance) (kafka_topic_partition_current_offset{topic=~".*\\.dlt"})) > 0
+        expr: sum by (topic) (max without (instance) (increase(kafka_topic_partition_current_offset{topic=~".*\\.dlt"}[15m]))) > 0
         for: 0m
         labels:
           severity: critical
           team: devops
         annotations:
-          summary: "Kafka dead-letter topic {{ $labels.topic }} contains failed messages"
-          description: "Topic {{ $labels.topic }} has depth {{ $value }}. Messages failed processing after maximum retries and were routed to the dead-letter topic."
+          summary: "New failed messages on Kafka dead-letter topic {{ $labels.topic }}"
+          description: "About {{ $value | printf \"%.0f\" }} message(s) reached {{ $labels.topic }} in the last 15 minutes. They failed processing after the maximum retries."
 
       - alert: KafkaConsumerLagHigh
         expr: sum by (consumergroup, topic) (clamp_min(max without (instance) (kafka_consumergroup_lag), 0)) > 50
