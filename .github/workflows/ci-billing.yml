@@ -13,7 +13,7 @@
 #   4. deploy-azure     — deploy to Azure App Service (main branch only)
 # =============================================================================
 
-name: CI — Billing Service
+name: CI/CD — Billing Service
 
 on:
   push:
