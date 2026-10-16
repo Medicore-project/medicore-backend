@@ -11,7 +11,7 @@
 #   4. deploy-azure     — deploy to Azure App Service (main branch only)
 # =============================================================================
 
-name: CI — Patient Service
+name: CI/CD — Patient Service
 
 on:
   push:
