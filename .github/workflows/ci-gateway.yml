@@ -10,7 +10,7 @@
 #   3. docker-publish   — multi-stage build, push to GHCR
 # =============================================================================
 
-name: CI — API Gateway
+name: CI/CD — API Gateway
 
 on:
   push:

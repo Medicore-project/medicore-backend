@@ -11,7 +11,7 @@
 #   4. deploy-azure     — deploy to Azure App Service (main branch only)
 # =============================================================================
 
-name: CI — Appointment Service
+name: CI/CD — Appointment Service
 
 on:
   push:

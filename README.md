@@ -215,6 +215,7 @@ Topics are created by `infra/kafka/create-topics.sh`. **Application code never c
 - One xUnit project per service. Integration tests carry `[Trait("Category", "Integration")]`.
 - **No Moq, no FluentAssertions, no EF InMemory.** Collaborators are hand-written fakes.
 - Test names are `Snake_case_sentences`.
+- **Exception — SE3112 unit-testing suite:** `src/services/appointment/MediCore.Appointment.UnitTests` deliberately uses **Moq** for test doubles and xUnit `[Theory]` parameterization, because demonstrating mocking frameworks is the point of that assessment. It references only the Application layer. See its [README](src/services/appointment/MediCore.Appointment.UnitTests/README.md).
 
 ### Operations
 
@@ -234,6 +235,12 @@ Each service has its own workflow in `.github/workflows/`: `ci-identity.yml`, `c
 `security-full.yml` runs a scheduled full scan: Gitleaks, CodeQL, NuGet audit, Trivy on every image, and an OWASP ZAP scan.
 
 A new service isn't built or tested in CI until it has its own workflow file.
+
+### SE3112 testing pipeline
+
+| Stage | Owner | Workflow | Run locally |
+|---|---|---|---|
+| Unit testing & mocking (Appointment) | Nizam T.H.B | `unit-tests-appointment.yml` (also `workflow_call`) | `src/services/appointment/MediCore.Appointment.UnitTests/run-tests.ps1` |
 
 ## Production (Azure)
 
