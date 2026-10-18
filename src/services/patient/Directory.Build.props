@@ -1,0 +1,21 @@
+<!--
+  Shared MSBuild settings for every Patient service project (Api, Application,
+  Infrastructure, Tests). Enables the built-in .NET code-quality analyzers so
+  maintainability, reliability and complexity issues are reported on every build,
+  locally and in the code-quality-patient workflow.
+-->
+<Project>
+  <PropertyGroup>
+    <!-- Pinned to the .NET 8 rule set so local SDK 10 builds and CI report the same rules. -->
+    <AnalysisLevel>8.0-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Findings are reported as warnings; the code-quality workflow publishes the counts. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Thresholds for the code-metrics rules (CA1502 cyclomatic complexity). -->
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" Link="CodeMetricsConfig.txt" Visible="false" />
+  </ItemGroup>
+</Project>
