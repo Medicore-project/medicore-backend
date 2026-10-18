@@ -31,6 +31,9 @@
   <Folder Name="/src/services/appointment/MediCore.Appointment.Tests/">
     <Project Path="src/services/appointment/MediCore.Appointment.Tests/Tests.csproj" />
   </Folder>
+  <Folder Name="/src/services/appointment/MediCore.Appointment.UnitTests/">
+    <Project Path="src/services/appointment/MediCore.Appointment.UnitTests/UnitTests.csproj" />
+  </Folder>
   <Folder Name="/src/services/identity/" />
   <Folder Name="/src/services/identity/MediCore.Identity.Api/">
     <Project Path="src/services/identity/MediCore.Identity.Api/Api.csproj" />

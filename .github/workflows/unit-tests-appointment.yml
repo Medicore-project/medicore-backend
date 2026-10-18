@@ -1,0 +1,110 @@
+# =============================================================================
+# unit-tests-appointment.yml — SE3112 Unit Testing & Mocking (Nizam T.H.B)
+# =============================================================================
+# Runs the isolated MediCore.Appointment.UnitTests suite (xUnit + Moq + Coverlet)
+# and publishes:
+#   • a test + coverage summary on the run page (GITHUB_STEP_SUMMARY)
+#   • TRX results and the HTML coverage report as artifacts
+#
+# Triggers on its own (path-filtered), and also exposes `workflow_call` so the
+# group's unified SE3112 pipeline can run it as one stage alongside mutation,
+# load, E2E and static-analysis jobs:
+#
+#   jobs:
+#     unit:
+#       uses: ./.github/workflows/unit-tests-appointment.yml
+# =============================================================================
+
+name: SE3112 — Unit Tests & Mocking (Appointment)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/services/appointment/MediCore.Appointment.Application/**"
+      - "src/services/appointment/MediCore.Appointment.UnitTests/**"
+      - "src/shared/**"
+      - ".github/workflows/unit-tests-appointment.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/services/appointment/MediCore.Appointment.Application/**"
+      - "src/services/appointment/MediCore.Appointment.UnitTests/**"
+      - "src/shared/**"
+      - ".github/workflows/unit-tests-appointment.yml"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "8.0.x"
+  PROJECT_DIR: src/services/appointment/MediCore.Appointment.UnitTests
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  unit-tests:
+    name: xUnit + Moq (Appointment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ env.PROJECT_DIR }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore UnitTests.csproj
+
+      - name: Build (warnings are errors)
+        run: dotnet build UnitTests.csproj --configuration Release --no-restore
+
+      - name: Run unit tests with coverage
+        run: |
+          dotnet test UnitTests.csproj \
+            --configuration Release \
+            --no-build \
+            --filter "Category=Unit" \
+            --settings coverlet.runsettings \
+            --collect "XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=unit-tests.trx" \
+            --logger "console;verbosity=normal"
+
+      - name: Coverage report
+        if: always()
+        run: |
+          dotnet tool restore
+          dotnet tool run reportgenerator \
+            "-reports:TestResults/**/coverage.cobertura.xml" \
+            "-targetdir:TestResults/coverage-report" \
+            "-reporttypes:Html;MarkdownSummaryGithub;TextSummary" \
+            "-title:MediCore Appointment - Unit Tests"
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## SE3112 · Unit Testing & Mocking — Appointment service"
+            echo
+            python3 tools/trx_summary.py
+            cat TestResults/coverage-report/SummaryGithub.md 2>/dev/null || echo "_No coverage report produced._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appointment-unit-tests
+          path: |
+            ${{ env.PROJECT_DIR }}/TestResults/*.trx
+            ${{ env.PROJECT_DIR }}/TestResults/coverage-report/
+          retention-days: 14
