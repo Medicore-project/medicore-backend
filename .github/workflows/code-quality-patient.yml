@@ -1,16 +1,16 @@
 # =============================================================================
-# code-quality-patient.yml — Patient Service Code Quality Gate (reusable)
+# code-quality-patient.yml — SE3112 Code Quality & Metrics (Patient service)
 # =============================================================================
-# Reusable workflow: called from the main pipeline with
+# Triggers on its own (path-filtered) and from the Actions tab, and also exposes
+# `workflow_call` so the group's SE3112 pipeline (se3112-pipeline.yml) runs it
+# as the code-quality stage:
 #
 #   jobs:
-#     patient-quality:
+#     code-quality:
 #       uses: ./.github/workflows/code-quality-patient.yml
-#       with:
+#       with:                         # optional, these are the defaults
 #         min-line-coverage: "65"
 #         min-branch-coverage: "45"
-#
-# It can also be started by hand from the Actions tab (workflow_dispatch).
 #
 # Steps:
 #   1. Build with .NET analyzers   — src/services/patient/Directory.Build.props + .editorconfig
@@ -24,9 +24,21 @@
 # with scripts/quality/scan-patient.ps1.
 # =============================================================================
 
-name: Code Quality — Patient Service
+name: SE3112 — Code Quality & Metrics (Patient)
 
 on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/services/patient/**"
+      - ".jscpd.json"
+      - ".github/workflows/code-quality-patient.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/services/patient/**"
+      - ".jscpd.json"
+      - ".github/workflows/code-quality-patient.yml"
   workflow_call:
     inputs:
       min-line-coverage:
@@ -60,8 +72,9 @@ env:
   DOTNET_VERSION: "8.0.x"
   SERVICE_DIR: src/services/patient
   TEST_PROJECT: src/services/patient/MediCore.Patient.Tests/Tests.csproj
-  MIN_LINE_COVERAGE: ${{ inputs.min-line-coverage }}
-  MIN_BRANCH_COVERAGE: ${{ inputs.min-branch-coverage }}
+  # push / pull_request runs have no inputs, so fall back to the defaults.
+  MIN_LINE_COVERAGE: ${{ inputs.min-line-coverage || '65' }}
+  MIN_BRANCH_COVERAGE: ${{ inputs.min-branch-coverage || '45' }}
   REPORTGENERATOR_VERSION: "5.4.18"
   JSCPD_VERSION: "4.0.5"
 
@@ -71,6 +84,7 @@ permissions:
 jobs:
   quality-gate:
     name: Patient — Analyzers, Coverage & Duplication
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     outputs:
       line-coverage: ${{ steps.coverage.outputs.line }}
