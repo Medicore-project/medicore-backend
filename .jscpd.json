@@ -1,0 +1,15 @@
+{
+  "format": ["csharp"],
+  "ignore": [
+    "**/bin/**",
+    "**/obj/**",
+    "**/Migrations/**",
+    "**/*.Designer.cs",
+    "**/*.Tests/**"
+  ],
+  "minTokens": 70,
+  "threshold": 5,
+  "reporters": ["consoleFull", "html", "json", "markdown"],
+  "output": ".quality/jscpd",
+  "absolute": false
+}

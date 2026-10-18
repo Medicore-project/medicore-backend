@@ -1,0 +1,49 @@
+# =============================================================================
+# MediCore — Load & Performance Testing CI Workflow (k6)
+# =============================================================================
+# Role: Load & Performance Testing (k6) — Tathira
+# =============================================================================
+
+name: Load & Performance Testing
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  k6-load-test:
+    name: Execute k6 Load Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment File
+        run: cp .env.example .env
+
+      - name: Start MediCore Stack (Docker Compose)
+        run: |
+          docker compose up -d postgres identity-api appointment-api gateway
+          echo "Waiting for API Gateway to be ready on :5000..."
+          timeout 60 bash -c 'until curl -s http://localhost:5000/appointment/api/public/booking/specializations; do sleep 3; done' || true
+
+      - name: Setup k6 CLI
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 Short Load Test
+        run: |
+          mkdir -p tests/load/reports
+          k6 run -e BASE_URL=http://localhost:5000 tests/load/scenarios/01_public_reads.js
+
+      - name: Upload HTML Performance Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-performance-report
+          path: tests/load/reports/*.html
+          retention-days: 14
+
+      - name: Tear Down Stack
+        if: always()
+        run: docker compose down

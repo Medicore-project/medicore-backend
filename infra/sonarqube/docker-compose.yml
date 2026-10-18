@@ -1,0 +1,26 @@
+# =============================================================================
+# Local SonarQube server for code-quality dashboards (developer machines only)
+# =============================================================================
+#   docker compose -f infra/sonarqube/docker-compose.yml up -d
+#   open http://localhost:9000  (first login admin / admin, then change it)
+# Then run scripts/quality/scan-backend.ps1 with a token from
+# My Account → Security.
+# =============================================================================
+
+services:
+  sonarqube:
+    image: sonarqube:9.9-community
+    container_name: medicore-sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
