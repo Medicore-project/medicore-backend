@@ -241,6 +241,7 @@ A new service isn't built or tested in CI until it has its own workflow file.
 | Stage | Owner | Workflow | Run locally |
 |---|---|---|---|
 | Unit testing & mocking (Appointment) | Nizam T.H.B | `unit-tests-appointment.yml` (also `workflow_call`) | `src/services/appointment/MediCore.Appointment.UnitTests/run-tests.ps1` |
+| Load & performance testing (k6) | Samarakoon S.M.T.C | `load-testing.yml` (also `workflow_call`) | `./tests/load/run-demo.sh public` |
 
 ## Production (Azure)
 
