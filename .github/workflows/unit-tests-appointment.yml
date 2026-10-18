@@ -64,7 +64,7 @@ jobs:
       - name: Restore
         run: dotnet restore UnitTests.csproj
 
-      - name: Build (warnings are errors)
+      - name: Build (Release)
         run: dotnet build UnitTests.csproj --configuration Release --no-restore
 
       - name: Run unit tests with coverage
