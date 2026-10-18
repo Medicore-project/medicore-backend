@@ -483,3 +483,9 @@ $RECYCLE.BIN/
 
 docsforAI/
 tests/load/reports/*.html
+
+# Code quality output (coverage runs, SonarQube scanner, duplication reports)
+coverage/
+.quality/
+.sonarqube/
+*.trx

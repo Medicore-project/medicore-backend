@@ -8,9 +8,9 @@
 #   Stage                     Owner                   Workflow
 #   ------------------------  -------------           ----------------------------------
 #   Unit Testing & Mocking    Nizam T.H.B             unit-tests-appointment.yml
-#   Code Quality & Metrics    <name>                  TODO
+#   Code Quality & Metrics    YOUR_NAME               code-quality-patient.yml
 #   Load & Performance        Samarakoon S.M.T.C      load-testing.yml
-#   UI / E2E                  TODO (frontend repo)     TODO
+#   UI / E2E                  TODO (frontend repo)    TODO
 #   Unified report            group                   `report` job below
 #
 # To add your stage:
@@ -48,19 +48,15 @@ jobs:
     uses: ./.github/workflows/unit-tests-appointment.yml
 
   # ---------------------------------------------------------------------------
-  # Stage 2 — Code Quality & Metrics (<name>)
-  # TODO(<name>): add your static-analysis / quality workflow here.
-  #   - If your stage reads the unit suite's coverage, add `needs: unit-tests`.
-  #   - Uploading SARIF to the Security tab needs `security-events: write`.
-  #   - A token such as SONAR_TOKEN comes through `secrets: inherit`.
+  # Stage 2 — Code Quality & Metrics (YOUR_NAME)
+  # .NET analyzers, Coverlet coverage and jscpd duplication over the Patient
+  # service, with a quality gate (line ≥ 65%, branch ≥ 45%, duplication ≤ 5%).
   # ---------------------------------------------------------------------------
-  # code-quality:
-  #   name: Code Quality & Metrics
-  #   uses: ./.github/workflows/<your-file>.yml
-  #   permissions:
-  #     contents: read
-  #     security-events: write
-  #   secrets: inherit
+  code-quality:
+    name: Code Quality & Metrics
+    uses: ./.github/workflows/code-quality-patient.yml
+    permissions:
+      contents: read
 
   # ---------------------------------------------------------------------------
   # Stage 3 — Load & Performance Testing (Samarakoon S.M.T.C)
@@ -99,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - unit-tests
-      # - code-quality     # TODO(<name>): uncomment when your stage is added
+      - code-quality
       - load-tests
       # - ui-e2e-tests     # TODO(<name>)
     if: ${{ !cancelled() }}   # report even when a stage failed

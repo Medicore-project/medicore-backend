@@ -1,0 +1,214 @@
+# =============================================================================
+# code-quality-patient.yml — SE3112 Code Quality & Metrics (Patient service)
+# =============================================================================
+# Triggers on its own (path-filtered) and from the Actions tab, and also exposes
+# `workflow_call` so the group's SE3112 pipeline (se3112-pipeline.yml) runs it
+# as the code-quality stage:
+#
+#   jobs:
+#     code-quality:
+#       uses: ./.github/workflows/code-quality-patient.yml
+#       with:                         # optional, these are the defaults
+#         min-line-coverage: "65"
+#         min-branch-coverage: "45"
+#
+# Steps:
+#   1. Build with .NET analyzers   — src/services/patient/Directory.Build.props + .editorconfig
+#   2. Tests with coverage         — coverlet (opencover + cobertura)
+#   3. Coverage report + gate      — ReportGenerator, fails below thresholds
+#   4. Duplication report + gate   — jscpd, fails above .jscpd.json threshold
+#   5. Publish reports             — job summary + downloadable artifact
+#
+# Outputs line-coverage and branch-coverage for the calling workflow.
+# No external server is needed. The SonarQube dashboard is produced locally
+# with scripts/quality/scan-patient.ps1.
+# =============================================================================
+
+name: SE3112 — Code Quality & Metrics (Patient)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/services/patient/**"
+      - ".jscpd.json"
+      - ".github/workflows/code-quality-patient.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/services/patient/**"
+      - ".jscpd.json"
+      - ".github/workflows/code-quality-patient.yml"
+  workflow_call:
+    inputs:
+      min-line-coverage:
+        description: "Minimum line coverage % (fails below)"
+        type: string
+        default: "65"
+      min-branch-coverage:
+        description: "Minimum branch coverage % (fails below)"
+        type: string
+        default: "45"
+    outputs:
+      line-coverage:
+        description: "Line coverage % of the patient service"
+        value: ${{ jobs.quality-gate.outputs.line-coverage }}
+      branch-coverage:
+        description: "Branch coverage % of the patient service"
+        value: ${{ jobs.quality-gate.outputs.branch-coverage }}
+  workflow_dispatch:
+    inputs:
+      min-line-coverage:
+        description: "Minimum line coverage % (fails below)"
+        type: string
+        default: "65"
+      min-branch-coverage:
+        description: "Minimum branch coverage % (fails below)"
+        type: string
+        default: "45"
+
+env:
+  # Baseline on 2026-10-18: line 69.6%, branch 46.7%, duplication 4.9%, 12 analyzer warnings.
+  DOTNET_VERSION: "8.0.x"
+  SERVICE_DIR: src/services/patient
+  TEST_PROJECT: src/services/patient/MediCore.Patient.Tests/Tests.csproj
+  # push / pull_request runs have no inputs, so fall back to the defaults.
+  MIN_LINE_COVERAGE: ${{ inputs.min-line-coverage || '65' }}
+  MIN_BRANCH_COVERAGE: ${{ inputs.min-branch-coverage || '45' }}
+  REPORTGENERATOR_VERSION: "5.4.18"
+  JSCPD_VERSION: "4.0.5"
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    name: Patient — Analyzers, Coverage & Duplication
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    outputs:
+      line-coverage: ${{ steps.coverage.outputs.line }}
+      branch-coverage: ${{ steps.coverage.outputs.branch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Node.js (jscpd)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+
+      # -----------------------------------------------------------------------
+      # 1. Build with analyzers (the test project builds Api, Application, Infrastructure)
+      # -----------------------------------------------------------------------
+      - name: Restore
+        run: dotnet restore "$TEST_PROJECT"
+
+      - name: Build with .NET analyzers
+        run: |
+          mkdir -p .quality
+          dotnet build "$TEST_PROJECT" --configuration Release --no-restore -nologo \
+            | tee .quality/build.log
+
+      - name: Analyzer warnings summary
+        if: always()
+        run: |
+          # Each warning can be printed more than once; keep unique file:line:rule entries.
+          grep -oE "[^ ]+\.cs\([0-9]+,[0-9]+\): warning (CA|IDE)[0-9]+: [^[]+" .quality/build.log \
+            | grep "services/patient/" | sort -u > .quality/analyzer-warnings.txt || true
+          TOTAL=$(wc -l < .quality/analyzer-warnings.txt)
+          {
+            echo "## Patient service — static analysis (.NET analyzers)"
+            echo ""
+            echo "**Unique analyzer warnings:** $TOTAL"
+            echo ""
+            echo "| Rule | Count |"
+            echo "|---|---|"
+            grep -oE "warning (CA|IDE)[0-9]+" .quality/analyzer-warnings.txt \
+              | awk '{print $2}' | sort | uniq -c | sort -rn \
+              | awk '{printf "| [%s](https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/%s) | %s |\n", $2, tolower($2), $1}'
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -----------------------------------------------------------------------
+      # 2. Tests with coverage
+      # -----------------------------------------------------------------------
+      - name: Run tests with coverage
+        run: |
+          dotnet test "$TEST_PROJECT" --configuration Release --no-build -nologo \
+            --collect:"XPlat Code Coverage" \
+            --results-directory .quality/coverage \
+            --logger "trx;LogFileName=patient-tests.trx"
+
+      # -----------------------------------------------------------------------
+      # 3. Coverage report + gate
+      # -----------------------------------------------------------------------
+      - name: Generate coverage report
+        if: always()
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version "$REPORTGENERATOR_VERSION"
+          reportgenerator \
+            -reports:".quality/coverage/**/coverage.cobertura.xml" \
+            -targetdir:".quality/coverage-report" \
+            -reporttypes:"Html;TextSummary;MarkdownSummaryGithub" \
+            -title:"MediCore Patient Service"
+          cat .quality/coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Coverage gate
+        id: coverage
+        run: |
+          LINE=$(grep -oP "Line coverage: \K[0-9.]+" .quality/coverage-report/Summary.txt)
+          BRANCH=$(grep -oP "Branch coverage: \K[0-9.]+" .quality/coverage-report/Summary.txt)
+          echo "line=$LINE" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Line coverage:   $LINE% (min $MIN_LINE_COVERAGE%)"
+          echo "Branch coverage: $BRANCH% (min $MIN_BRANCH_COVERAGE%)"
+          FAIL=0
+          if awk "BEGIN {exit !($LINE < $MIN_LINE_COVERAGE)}"; then
+            echo "::error::Line coverage $LINE% is below $MIN_LINE_COVERAGE%"; FAIL=1
+          fi
+          if awk "BEGIN {exit !($BRANCH < $MIN_BRANCH_COVERAGE)}"; then
+            echo "::error::Branch coverage $BRANCH% is below $MIN_BRANCH_COVERAGE%"; FAIL=1
+          fi
+          exit $FAIL
+
+      # -----------------------------------------------------------------------
+      # 4. Duplication report + gate (threshold in .jscpd.json)
+      # -----------------------------------------------------------------------
+      - name: Duplication check (jscpd)
+        if: always()
+        run: |
+          set +e
+          npx --yes "jscpd@$JSCPD_VERSION" --config .jscpd.json --silent "$SERVICE_DIR"
+          STATUS=$?
+          set -e
+          {
+            echo "## Patient service — code duplication (jscpd)"
+            echo ""
+            cat .quality/jscpd/jscpd-report.md 2>/dev/null || echo "_No report produced._"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::error::Duplicated code is above the threshold in .jscpd.json"
+          fi
+          exit $STATUS
+
+      # -----------------------------------------------------------------------
+      # 5. Publish reports
+      # -----------------------------------------------------------------------
+      - name: Upload quality reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: code-quality-patient-${{ github.sha }}
+          path: |
+            .quality/coverage-report/
+            .quality/jscpd/
+            .quality/analyzer-warnings.txt
+            .quality/coverage/**/*.trx
+          retention-days: 30

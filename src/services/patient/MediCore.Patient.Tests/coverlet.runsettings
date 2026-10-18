@@ -4,9 +4,12 @@
     <DataCollectors>
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
+          <!-- opencover is read by SonarQube, cobertura by ReportGenerator and Codecov. -->
+          <Format>opencover,cobertura</Format>
           <!-- Coverage is graded on business logic, not EF migrations or dependency wiring. -->
           <Exclude>[MediCore.Patient.Infrastructure]*,[MediCore.Contracts]*</Exclude>
-          <ExcludeByFile>**/Program.cs</ExcludeByFile>
+          <ExcludeByFile>**/Program.cs,**/Migrations/*.cs</ExcludeByFile>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
           <IncludeTestAssembly>false</IncludeTestAssembly>
         </Configuration>
       </DataCollector>
