@@ -5,13 +5,13 @@
 # owner's own workflow, called through `workflow_call`, so each person's work
 # stays in a file they own and can still be run on its own for their demo.
 #
-#   Stage                     Owner                   Workflow
-#   ------------------------  -------------           ----------------------------------
-#   Unit Testing & Mocking    Nizam T.H.B             unit-tests-appointment.yml
-#   Code Quality & Metrics    YOUR_NAME               code-quality-patient.yml
-#   Load & Performance        Samarakoon S.M.T.C      load-testing.yml
-#   UI / E2E                  TODO (frontend repo)    TODO
-#   Unified report            group                   `report` job below
+#   Stage                     Owner                     Workflow
+#   ------------------------  -------------             ----------------------------------
+#   Unit Testing & Mocking    Nizam T.H.B               unit-tests-appointment.yml
+#   Code Quality & Metrics    Bawantha Wijesinghe       code-quality-patient.yml
+#   Load & Performance        Samarakoon S.M.T.C        load-testing.yml
+#   UI / E2E                  Chamika Kasthuriarachchi  medicore-frontend: ui-e2e-tests.yml
+#   Unified report            group                     `report` job below
 #
 # To add your stage:
 #   1. Give your workflow an `on: workflow_call:` trigger.
@@ -67,24 +67,22 @@ jobs:
     secrets: inherit
 
   # ---------------------------------------------------------------------------
-  # Stage 4 — UI / E2E Testing (<name>)
-  # TODO(<name>): add your Playwright workflow here. It lives in the FRONTEND
-  # repo, so it is called by its full path and a branch/tag ref.
-  #   - In a called workflow `actions/checkout` defaults to THIS (backend) repo.
-  #     Your checkout step must set `repository: Medicore-project/medicore-frontend`.
-  #   - Your workflow asks for `checks: write`; the caller must grant it here.
-  #   - `secrets: inherit` passes THIS repo's secrets, so E2E_ADMIN_* must exist
-  #     in the backend repo's secrets if run_e2e is true.
+  # Stage 4 — UI / E2E Testing (Chamika Kasthuriarachchi)
+  # Playwright: 68 UI tests against API test doubles on every run (the real
+  # production bundle in Chromium, every gateway call answered by a fake).
+  # The workflow lives in the FRONTEND repo and checks that repo out itself.
+  # The live-stack E2E journeys (Identity → Patient → Appointment → Kafka →
+  # Billing) run on demand from the frontend repo, so run_e2e stays false here.
   # ---------------------------------------------------------------------------
-  # ui-e2e-tests:
-  #   name: UI / E2E
-  #   uses: Medicore-project/medicore-frontend/.github/workflows/<your-file>.yml@main
-  #   with:
-  #     run_e2e: false            # true also runs the live-stack journeys, which need a running gateway
-  #   permissions:
-  #     contents: read
-  #     checks: write
-  #   secrets: inherit
+  ui-e2e-tests:
+    name: UI / E2E
+    uses: Medicore-project/medicore-frontend/.github/workflows/ui-e2e-tests.yml@main
+    with:
+      run_e2e: false            # true also runs the live-stack journeys, which need a running gateway
+    permissions:
+      contents: read
+      checks: write             # the stage publishes its JUnit summary as a check run
+    secrets: inherit
 
   # ---------------------------------------------------------------------------
   # Unified report — one table of every stage's result on the run page.
@@ -97,7 +95,7 @@ jobs:
       - unit-tests
       - code-quality
       - load-tests
-      # - ui-e2e-tests     # TODO(<name>)
+      - ui-e2e-tests
     if: ${{ !cancelled() }}   # report even when a stage failed
     steps:
       - name: Write pipeline summary
