@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Scenario 2: Authenticated Staff Workflow</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 24px; color: #38bdf8; }
+    .badge { padding: 6px 14px; border-radius: 9999px; font-weight: 600; font-size: 14px; }
+    .badge.pass { background: #065f46; color: #34d399; border: 1px solid #10b981; }
+    .badge.fail { background: #881337; color: #f43f5e; border: 1px solid #f43f5e; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1e293b; padding: 18px; border-radius: 8px; border: 1px solid #334155; }
+    .card .title { font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .card .value { font-size: 28px; font-weight: 700; color: #f1f5f9; }
+    .card .unit { font-size: 14px; color: #64748b; font-weight: normal; }
+    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; border: 1px solid #334155; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }
+    th { background: #0f172a; color: #94a3b8; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    .footer { margin-top: 24px; text-align: center; color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1>Scenario 2: Authenticated Staff Workflow</h1>
+        <small style="color: #64748b;">MediCore Microservice Performance & Load Testing</small>
+      </div>
+      <span class="badge pass">SLO PASSED</span>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="title">Total Requests</div>
+        <div class="value">37</div>
+      </div>
+      <div class="card">
+        <div class="title">Throughput</div>
+        <div class="value">2.1 <span class="unit">req/s</span></div>
+      </div>
+      <div class="card">
+        <div class="title">p(95) Response Time</div>
+        <div class="value">15.7 <span class="unit">ms</span></div>
+      </div>
+      <div class="card">
+        <div class="title">Failure Rate</div>
+        <div class="value">0.00%</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Observed Value</th>
+          <th>SLO Target / Threshold</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Latency p(95)</td>
+          <td>15.7 ms</td>
+          <td>&lt; 400.0 ms</td>
+          <td style="color: #34d399; font-weight: 600;">PASS</td>
+        </tr>
+        <tr>
+          <td>Latency Average</td>
+          <td>18.4 ms</td>
+          <td>&lt; 250.0 ms</td>
+          <td style="color: #34d399; font-weight: 600;">PASS</td>
+        </tr>
+        <tr>
+          <td>Latency Min / Max</td>
+          <td>4.4 ms / 357.3 ms</td>
+          <td>-</td>
+          <td>INFO</td>
+        </tr>
+        <tr>
+          <td>HTTP Error Rate</td>
+          <td>0.00%</td>
+          <td>&lt; 1.0%</td>
+          <td style="color: #34d399; font-weight: 600;">PASS</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="footer">
+      Generated automatically by k6 Automated Testing Pipeline • MediCore SE3112 Assessment
+    </div>
+  </div>
+</body>
+</html>
