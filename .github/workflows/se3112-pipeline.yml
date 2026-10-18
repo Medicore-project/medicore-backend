@@ -8,7 +8,7 @@
 #   Stage                     Owner                     Workflow
 #   ------------------------  -------------             ----------------------------------
 #   Unit Testing & Mocking    Nizam T.H.B               unit-tests-appointment.yml
-#   Code Quality & Metrics    Bawantha Wijesinghe       code-quality-patient.yml
+#   Code Quality & Metrics    W.A.B.B.Wijesinghe        code-quality-patient.yml
 #   Load & Performance        Samarakoon S.M.T.C        load-testing.yml
 #   UI / E2E                  Chamika Kasthuriarachchi  medicore-frontend: ui-e2e-tests.yml
 #   Unified report            group                     `report` job below
@@ -48,7 +48,7 @@ jobs:
     uses: ./.github/workflows/unit-tests-appointment.yml
 
   # ---------------------------------------------------------------------------
-  # Stage 2 — Code Quality & Metrics (YOUR_NAME)
+  # Stage 2 — Code Quality & Metrics (W.A.B.B.Wijesinghe)
   # .NET analyzers, Coverlet coverage and jscpd duplication over the Patient
   # service, with a quality gate (line ≥ 65%, branch ≥ 45%, duplication ≤ 5%).
   # ---------------------------------------------------------------------------
