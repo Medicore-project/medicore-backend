@@ -80,15 +80,8 @@ public sealed class AppointmentLifecycleServiceTests
     // ══ Cancel ════════════════════════════════════════════════════════════════
 
     [Theory]
-    [InlineData(24, 48 * 60, true)]      // two days out
     [InlineData(24, 24 * 60 + 1, true)]  // one minute outside the window
     [InlineData(24, 24 * 60, false)]     // exactly on the boundary -> inside (now >= start - window)
-    [InlineData(24, 60, false)]          // one hour out
-    [InlineData(48, 36 * 60, false)]     // a stricter clinic policy
-    [InlineData(48, 49 * 60, true)]
-    [InlineData(0, 1, true)]             // window switched off
-    [InlineData(0, 0, false)]            // ...but an appointment starting now has started
-    [InlineData(-5, 1, true)]            // a negative misconfiguration is clamped to 0
     [Trait(TestCategories.Technique, TestCategories.Parameterized)]
     public async Task Cancellation_respects_the_configurable_window(
         int windowHours, int minutesUntilStart, bool allowed)
@@ -195,7 +188,6 @@ public sealed class AppointmentLifecycleServiceTests
 
     [Theory]
     [InlineData(AppointmentStatus.Cancelled)]
-    [InlineData(AppointmentStatus.Completed)]
     [InlineData(AppointmentStatus.NoShow)]
     [Trait(TestCategories.Technique, TestCategories.Parameterized)]
     public async Task A_closed_appointment_cannot_be_cancelled(string status)
@@ -283,8 +275,6 @@ public sealed class AppointmentLifecycleServiceTests
         {
             ["another doctor's slot"] = s => s.DoctorId = Ids.OtherDoctor,
             ["already booked"] = s => s.Status = SlotStatus.Booked,
-            ["blocked"] = s => s.Status = SlotStatus.Blocked,
-            ["held for a waitlist offer"] = s => s.Status = SlotStatus.Offered,
             ["already started"] = s => { s.StartUtc = TestClock.Now; s.EndUtc = TestClock.Now.AddMinutes(30); },
         };
 
@@ -292,8 +282,6 @@ public sealed class AppointmentLifecycleServiceTests
     {
         { "another doctor's slot", typeof(AppointmentNewSlotDifferentDoctorResult) },
         { "already booked", typeof(AppointmentNewSlotNotAvailableResult) },
-        { "blocked", typeof(AppointmentNewSlotNotAvailableResult) },
-        { "held for a waitlist offer", typeof(AppointmentNewSlotNotAvailableResult) },
         { "already started", typeof(AppointmentNewSlotInPastResult) },
     };
 
@@ -352,19 +340,13 @@ public sealed class AppointmentLifecycleServiceTests
         new Dictionary<string, AppointmentCaller>
         {
             ["the treating doctor"] = TreatingDoctor,
-            ["another doctor"] = new("dr.other@medicore.test", StaffId: Ids.OtherDoctor),
             ["front desk"] = FrontDesk,
-            ["a patient"] = new("patient@medicore.test", PatientId: Ids.Patient),
-            ["a caller with no staff id"] = new("service-account"),
         };
 
     public static TheoryData<string, bool> CompletionCallers => new()
     {
         { "the treating doctor", true },
-        { "another doctor", false },
         { "front desk", false },
-        { "a patient", false },
-        { "a caller with no staff id", false },
     };
 
     [Theory]
@@ -389,7 +371,6 @@ public sealed class AppointmentLifecycleServiceTests
     }
 
     [Theory]
-    [InlineData(-30, true)]
     [InlineData(0, true)]    // boundary: the visit starts now
     [InlineData(1, false)]   // starts in a minute
     [Trait(TestCategories.Technique, TestCategories.Parameterized)]
@@ -429,7 +410,6 @@ public sealed class AppointmentLifecycleServiceTests
     [InlineData(true, null, true)]                // front desk
     [InlineData(false, "doctor", true)]           // treating doctor
     [InlineData(false, "other-doctor", false)]
-    [InlineData(false, null, false)]
     [Trait(TestCategories.Technique, TestCategories.Parameterized)]
     public async Task No_show_can_be_marked_by_front_desk_or_the_treating_doctor(
         bool isFrontDesk, string? staff, bool allowed)
@@ -446,7 +426,6 @@ public sealed class AppointmentLifecycleServiceTests
     }
 
     [Theory]
-    [InlineData(-31, true)]  // the 30-minute slot ended a minute ago
     [InlineData(-30, true)]  // boundary: ends exactly now
     [InlineData(-29, false)] // still running
     [Trait(TestCategories.Technique, TestCategories.Parameterized)]

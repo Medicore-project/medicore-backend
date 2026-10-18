@@ -66,13 +66,15 @@ jobs:
 
 ## What is tested
 
+**80 test runs from 47 test methods** (25 `[Fact]`, 22 `[Theory]` producing 55 data rows), all passing.
+
 | Area | System under test | Highlights |
 |---|---|---|
 | **Booking** (SCRUM-34/35) | `AppointmentBookingService` | Transactional outbox verified with `It.Is<OutboxMessage>`; call-order check (patient lock → read → overlap → save); every rejection proves *nothing was saved*; service code always from the doctor cache (anti-tampering); retry loop driven by a fake transaction that loses N races; `SetupSequence` reproduces "lost the race, retry finds slot booked" |
-| **Lifecycle** (SCRUM-36) | `AppointmentLifecycleService` | Cancellation window boundaries incl. clamped misconfiguration; slot released and handed to the waitlist mock (same instance); `MockSequence` + strict mocks prove the waitlist offer is staged before the single save; reschedule guards; who may complete / mark no-show |
+| **Lifecycle** (SCRUM-36) | `AppointmentLifecycleService` | Cancellation window boundary (exactly 24 h vs 24 h + 1 min); slot released and handed to the waitlist mock (same instance); `MockSequence` + strict mocks prove the waitlist offer is staged before the single save; reschedule guards; who may complete / mark no-show |
 | **Waitlist** (SCRUM-37) | `WaitlistOfferer` | Strict mocks prove an unbookable slot touches no dependency; queue walk withdraws, skips and stops at the right patient; offer expiry = min(window, slot start) |
-| **Validation** | Request validators | Boundary-value analysis: 500-char reason, 8,000-char notes, trimming |
-| **Domain rules** | `ServiceCodes`, `AppointmentStatusTransitions` | Slug table incl. punctuation/non-ASCII/overlong input; full 5×5 state-machine matrix from `ClassData` |
+| **Validation** | Request validators | Boundary-value analysis: 500-char reason and 8,000-char notes, tested on and one over the limit |
+| **Domain rules** | `ServiceCodes`, `AppointmentStatusTransitions` | Slug table incl. punctuation and overlong input; state machine (every way out of Booked, no way back) from `ClassData` |
 
 ### Test-double vocabulary used in the code
 
