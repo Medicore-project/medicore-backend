@@ -11,7 +11,7 @@
 #   4. deploy-azure     — deploy to Azure App Service (main branch only)
 # =============================================================================
 
-name: CI — Identity Service
+name: CI/CD — Identity Service
 
 on:
   push:

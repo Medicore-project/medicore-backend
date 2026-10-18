@@ -291,7 +291,7 @@ az webapp log tail \
 
 For the scrum board, screenshot each of these GitHub Actions pages:
 
-1. **Actions tab** → `CI — Identity Service` → latest run → show all 4 jobs green
+1. **Actions tab** → `CI/CD — Identity Service` → latest run → show all 4 jobs green
 2. **Actions tab** → `Security — Full Scan` → latest run → Gitleaks / CodeQL / Trivy jobs
 3. **Security tab** → Code scanning alerts (show 0 high/critical)
 4. **Packages tab** → `medicore-identity` image → show published tags
