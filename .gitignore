@@ -482,3 +482,8 @@ $RECYCLE.BIN/
 *.swp
 
 docsforAI/
+# Code quality output (coverage runs, SonarQube scanner, duplication reports)
+coverage/
+.quality/
+.sonarqube/
+*.trx
