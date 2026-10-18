@@ -1,0 +1,126 @@
+# =============================================================================
+# se3112-pipeline.yml — SE3112 Microservice Testing Pipeline (Group 29)
+# =============================================================================
+# The ONE shared file. It holds no test logic of its own: every stage is the
+# owner's own workflow, called through `workflow_call`, so each person's work
+# stays in a file they own and can still be run on its own for their demo.
+#
+#   Stage                     Owner          Workflow
+#   ------------------------  -------------  ----------------------------------
+#   Unit Testing & Mocking    Nizam T.H.B    unit-tests-appointment.yml
+#   Code Quality & Metrics    <name>         TODO
+#   Load & Performance        <name>         TODO
+#   UI / E2E                  <name>         TODO (frontend repo)
+#   Unified report            group          `report` job below
+#
+# To add your stage:
+#   1. Give your workflow an `on: workflow_call:` trigger.
+#   2. Uncomment and fill in YOUR block below. Do not edit anyone else's.
+#   3. Add your job id to the `needs:` list of the `report` job.
+# =============================================================================
+
+name: SE3112 — Testing Pipeline
+
+on:
+  workflow_dispatch:            # "Run workflow" button (only once this file is on main)
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches:
+      - main
+      - develop
+      - feature/se3112-testing-pipeline   # so each teammate's PR into the integration branch runs the pipeline
+
+permissions:
+  contents: read                # stages that need more set it on their own job below
+
+concurrency:
+  group: se3112-pipeline-${{ github.ref }}
+  cancel-in-progress: true      # a newer push supersedes the older run
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 1 — Unit Testing & Mocking (Nizam T.H.B)
+  # xUnit + Moq + Coverlet over the Appointment service's Application layer.
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit Testing & Mocking
+    uses: ./.github/workflows/unit-tests-appointment.yml
+
+  # ---------------------------------------------------------------------------
+  # Stage 2 — Code Quality & Metrics (<name>)
+  # TODO(<name>): add your static-analysis / quality workflow here.
+  #   - If your stage reads the unit suite's coverage, add `needs: unit-tests`.
+  #   - Uploading SARIF to the Security tab needs `security-events: write`.
+  #   - A token such as SONAR_TOKEN comes through `secrets: inherit`.
+  # ---------------------------------------------------------------------------
+  # code-quality:
+  #   name: Code Quality & Metrics
+  #   uses: ./.github/workflows/<your-file>.yml
+  #   permissions:
+  #     contents: read
+  #     security-events: write
+  #   secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # Stage 3 — Load & Performance Testing (<name>)
+  # TODO(<name>): add your k6 workflow here.
+  #   - Your workflow must start the stack itself (docker compose up) and aim
+  #     k6 at http://localhost:5000. Never point CI at the Azure deployment.
+  #   - Keep the CI profile short; save stress/spike for the live demo.
+  # ---------------------------------------------------------------------------
+  # load-tests:
+  #   name: Load & Performance
+  #   uses: ./.github/workflows/<your-file>.yml
+  #   secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # Stage 4 — UI / E2E Testing (<name>)
+  # TODO(<name>): add your Playwright workflow here. It lives in the FRONTEND
+  # repo, so it is called by its full path and a branch/tag ref.
+  #   - In a called workflow `actions/checkout` defaults to THIS (backend) repo.
+  #     Your checkout step must set `repository: Medicore-project/medicore-frontend`.
+  #   - Your workflow asks for `checks: write`; the caller must grant it here.
+  #   - `secrets: inherit` passes THIS repo's secrets, so E2E_ADMIN_* must exist
+  #     in the backend repo's secrets if run_e2e is true.
+  # ---------------------------------------------------------------------------
+  # ui-e2e-tests:
+  #   name: UI / E2E
+  #   uses: Medicore-project/medicore-frontend/.github/workflows/<your-file>.yml@main
+  #   with:
+  #     run_e2e: false            # true also runs the live-stack journeys, which need a running gateway
+  #   permissions:
+  #     contents: read
+  #     checks: write
+  #   secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # Unified report — one table of every stage's result on the run page.
+  # Each stage's own summary and artifacts appear on the same page.
+  # ---------------------------------------------------------------------------
+  report:
+    name: Pipeline Report
+    runs-on: ubuntu-latest
+    needs:
+      - unit-tests
+      # - code-quality     # TODO(<name>): uncomment when your stage is added
+      # - load-tests       # TODO(<name>)
+      # - ui-e2e-tests     # TODO(<name>)
+    if: ${{ !cancelled() }}   # report even when a stage failed
+    steps:
+      - name: Write pipeline summary
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          {
+            echo "## SE3112 · Testing Pipeline — Group 29"
+            echo
+            echo "| Stage | Result |"
+            echo "|---|---|"
+            echo "$NEEDS" | jq -r '
+              {"success":"✅ passed","failure":"❌ failed","cancelled":"⚪ cancelled","skipped":"⏭️ skipped"} as $icon
+              | to_entries[]
+              | "| `\(.key)` | \($icon[.value.result] // .value.result) |"'
+            echo
+            echo "Each stage's detailed summary is below; reports are under **Artifacts**."
+          } >> "$GITHUB_STEP_SUMMARY"

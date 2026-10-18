@@ -106,5 +106,6 @@ jobs:
           name: appointment-unit-tests
           path: |
             ${{ env.PROJECT_DIR }}/TestResults/*.trx
+            ${{ env.PROJECT_DIR }}/TestResults/**/coverage.cobertura.xml
             ${{ env.PROJECT_DIR }}/TestResults/coverage-report/
           retention-days: 14
