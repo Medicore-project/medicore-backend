@@ -35,6 +35,10 @@ From `src/services/appointment/MediCore.Appointment.UnitTests/`:
 ./run-tests.ps1 -Open                  # also open the coverage report
 ```
 
+If PowerShell refuses with *"is not digitally signed"*, the machine's execution policy is `AllSigned`.
+Run it as `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1`, or allow local scripts for your
+account once with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
 ```bash
 ./run-tests.sh            # Linux / macOS, same filters as the first argument
 dotnet test --filter "Technique=Parameterized"   # raw dotnet CLI
